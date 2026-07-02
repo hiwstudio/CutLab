@@ -96,9 +96,13 @@ def ingest_handler(ctx: JobContext) -> None:
 
             def do_thumbs() -> list[str]:
                 tdir.mkdir(parents=True, exist_ok=True)
+                # select: always the first frame, then one every 5s (plain
+                # fps=1/5 can emit nothing at all for very short videos).
                 run_ffmpeg([
                     "-i", str(src),
-                    "-vf", "fps=1/5,scale=160:-2",
+                    "-vf",
+                    r"select=isnan(prev_selected_t)+gte(t-prev_selected_t\,5),scale=160:-2",
+                    "-vsync", "vfr",
                     "-q:v", "4",
                     str(tdir / "t_%04d.jpg"),
                 ])
