@@ -1,0 +1,6 @@
+{
+  "id": "default",
+  "name": "Default",
+  "description": "Minimal stub profile. Per-brand profiles (saliency weights, caption styles, export presets) arrive in later phases.",
+  "canvas_default": { "width": 1920, "height": 1080, "fps": 30 }
+}

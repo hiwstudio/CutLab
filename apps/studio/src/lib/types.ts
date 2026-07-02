@@ -1,0 +1,135 @@
+// Hand-mirrored from apps/server (Phase 0 convention, see B6).
+
+export interface Canvas {
+  width: number;
+  height: number;
+  fps: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  head_rev: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Asset {
+  kind: "video" | "audio" | "image";
+  src: string;
+  proxy?: string;
+  duration_ms?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface AssetRow {
+  project_id: string;
+  asset_id: string;
+  kind: Asset["kind"];
+  src: string;
+  proxy?: string | null;
+  duration_ms?: number | null;
+  width?: number | null;
+  height?: number | null;
+  status: "ingesting" | "ready" | "failed";
+}
+
+export interface Transform {
+  scale?: number;
+  x?: number;
+  y?: number;
+  rotate?: number;
+}
+
+export interface MediaClip {
+  id: string;
+  asset: string;
+  in_ms: number;
+  out_ms: number;
+  start_ms: number;
+  speed?: number;
+  gain_db?: number;
+  transform?: Transform;
+  crop?: { mode: string; rect?: { x: number; y: number; w: number; h: number } };
+}
+
+export interface CaptionClip {
+  id: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  cap_style?: string;
+}
+
+export type Clip = MediaClip | CaptionClip;
+
+export type TrackKind = "video" | "audio" | "caption" | "text";
+
+export interface Track {
+  id: string;
+  kind: TrackKind;
+  clips: Clip[];
+}
+
+export interface EDL {
+  edl_version: string;
+  project: {
+    id: string;
+    name: string;
+    profile?: string;
+    canvas: Canvas;
+    duration_ms: number;
+  };
+  assets: Record<string, Asset>;
+  tracks: Track[];
+}
+
+export interface Job {
+  id: string;
+  kind: string;
+  project_id: string | null;
+  state: "queued" | "running" | "done" | "failed" | "cancelled";
+  stage: string | null;
+  progress: number;
+  error: string | null;
+  artifacts: Record<string, unknown>;
+}
+
+export interface RevisionRow {
+  rev: number;
+  parent_rev: number | null;
+  state: "committed" | "proposed" | "rejected";
+  summary: string;
+  created_at: string;
+}
+
+export type Op = { op: string } & Record<string, unknown>;
+
+export interface Issue {
+  code: string;
+  path: string;
+  message: string;
+}
+
+export interface ApplyResult {
+  rev: number;
+  summary: string;
+  edl: EDL;
+  warnings: Issue[];
+}
+
+export function isMediaClip(c: Clip): c is MediaClip {
+  return (c as MediaClip).asset !== undefined;
+}
+
+export function clipEndMs(c: Clip): number {
+  if (isMediaClip(c)) {
+    return c.start_ms + Math.round((c.out_ms - c.in_ms) / (c.speed ?? 1.0));
+  }
+  return c.end_ms;
+}
+
+export function clipLenMs(c: Clip): number {
+  return clipEndMs(c) - c.start_ms;
+}
