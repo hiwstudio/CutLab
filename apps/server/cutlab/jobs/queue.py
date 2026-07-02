@@ -165,7 +165,9 @@ def artifacts_valid(artifacts: Any) -> bool:
     elif isinstance(artifacts, list):
         paths = [p for p in artifacts if isinstance(p, str)]
     elif isinstance(artifacts, dict):
-        for v in artifacts.values():
+        for k, v in artifacts.items():
+            if k.startswith("_"):
+                continue  # metadata (e.g. logged ffmpeg command), not a file
             if isinstance(v, str):
                 paths.append(v)
             elif isinstance(v, list):

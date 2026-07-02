@@ -13,3 +13,4 @@ dependencies = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["slow: media-encoding tests (deselect with '-m \"not slow\"')"]
