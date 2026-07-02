@@ -48,7 +48,8 @@ class JobQueue:
         """Atomically claim the oldest queued job. Returns the row or None."""
         with self.db.transaction() as conn:
             row = conn.execute(
-                "SELECT id FROM jobs WHERE state='queued' ORDER BY created_at, id LIMIT 1"
+                # rowid = insertion order; created_at alone ties within one ms.
+                "SELECT id FROM jobs WHERE state='queued' ORDER BY rowid LIMIT 1"
             ).fetchone()
             if row is None:
                 return None
