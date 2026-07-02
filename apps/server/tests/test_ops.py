@@ -300,6 +300,23 @@ def test_delete_range_all_tracks(engine: Engine, project: str):
     assert [(c["start_ms"], c["end_ms"]) for c in cap_track["clips"]] == [(0, 1000), (1000, 3000)]
 
 
+def test_delete_range_degenerate_remnants_dropped(engine: Engine, project: str):
+    """Regression (found by hypothesis): a 1ms delete_range across a 0.5x
+    clip floors the left remnant to zero source length; it must be dropped,
+    never committed as an invalid out_ms <= in_ms clip."""
+    apply(engine, project, [
+        {"op": "add_clip", "track": "trk_v1", "asset": "ast_v1",
+         "in_ms": 0, "out_ms": 100, "start_ms": 0, "speed": 0.5, "id": "clp_dg"},
+    ])
+    r = apply(engine, project, [
+        {"op": "delete_range", "tracks": ["trk_v1"], "from_ms": 1, "to_ms": 2,
+         "ripple": False},
+    ])
+    t = track_of(r["edl"], "trk_v1")
+    for c in t["clips"]:
+        assert c["out_ms"] > c["in_ms"]
+
+
 def test_set_speed(engine: Engine, project: str):
     three_clips(engine, project)
     # c2 source 2000ms at 2x -> 1000ms timeline; gap opens, still valid.

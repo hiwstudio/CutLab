@@ -101,6 +101,14 @@ def _ripple(track: Track, at_ms: int, delta_ms: int, exclude: set[str] = frozens
             c.end_ms += delta_ms
 
 
+def _degenerate(clip: MediaClip | CaptionClip) -> bool:
+    """True when trimming left the clip with no content (empty source range
+    or empty time window)."""
+    if isinstance(clip, MediaClip):
+        return clip.out_ms <= clip.in_ms
+    return clip.end_ms <= clip.start_ms
+
+
 def _asset_kind_ok(edl: EDL, asset_id: str, track: Track, path: str) -> None:
     asset = edl.assets.get(asset_id)
     if asset is None:
@@ -317,15 +325,23 @@ class DeleteRange(_OpBase):
             elif s >= self.from_ms and e <= self.to_ms:
                 removed += 1  # fully inside -> dropped
             elif s < self.from_ms and e > self.to_ms:
-                # Spans the whole range: split into left + right.
-                left, right = self._split_spanning(clip)
-                kept.extend([left, right])
+                # Spans the whole range: split into left + right. Rounding can
+                # make a remnant degenerate (zero source length) — drop those.
+                pieces = self._split_spanning(clip)
+                removed += 2 - len(pieces)
+                kept.extend(pieces)
             elif s < self.from_ms:
                 self._trim_end_to(clip, self.from_ms)
-                kept.append(clip)
+                if _degenerate(clip):
+                    removed += 1
+                else:
+                    kept.append(clip)
             else:
                 self._trim_start_to(clip, self.to_ms)
-                kept.append(clip)
+                if _degenerate(clip):
+                    removed += 1
+                else:
+                    kept.append(clip)
         track.clips = kept
         if self.ripple:
             _ripple(track, self.to_ms, -length)
@@ -347,7 +363,7 @@ class DeleteRange(_OpBase):
         if isinstance(clip, CaptionClip):
             clip.end_ms = max(clip.end_ms, at_ms + 1)
 
-    def _split_spanning(self, clip):
+    def _split_spanning(self, clip) -> list:
         if isinstance(clip, MediaClip):
             right = clip.model_copy(deep=True)
             right.id = ids.new_clip_id()
@@ -355,12 +371,12 @@ class DeleteRange(_OpBase):
             head_src = _src_len_for_timeline(self.to_ms - right.start_ms, right.speed)
             right.in_ms += head_src
             right.start_ms = self.to_ms
-            return clip, right
-        right = clip.model_copy(deep=True)
-        right.id = ids.new_clip_id()
-        clip.end_ms = self.from_ms
-        right.start_ms = self.to_ms
-        return clip, right
+        else:
+            right = clip.model_copy(deep=True)
+            right.id = ids.new_clip_id()
+            clip.end_ms = self.from_ms
+            right.start_ms = self.to_ms
+        return [p for p in (clip, right) if not _degenerate(p)]
 
 
 class SetSpeed(_OpBase):

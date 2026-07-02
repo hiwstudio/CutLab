@@ -141,7 +141,11 @@ class Engine:
             raise Rejected([Issue(e.code, e.path, e.message)]) from e
 
         working.project.duration_ms = working.computed_duration_ms()
-        result = validate(working, base_dir=self._base_dir(project_id))
+        # Validate the serialized snapshot, not the model: in-place mutations
+        # skip pydantic's shape validators, so a full re-parse is the safety
+        # net that guarantees no committed revision can hold an invalid EDL.
+        snapshot = json.loads(working.model_dump_json(exclude_none=True))
+        result = validate(snapshot, base_dir=self._base_dir(project_id))
         if not result.valid:
             raise Rejected(result.errors)
 
