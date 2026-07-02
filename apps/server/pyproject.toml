@@ -1,0 +1,15 @@
+[project]
+name = "cutlab-server"
+version = "0.1.0"
+description = "CutLab server: EDL engine, durable jobs, FFmpeg render pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "python-multipart",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

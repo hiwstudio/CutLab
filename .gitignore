@@ -1,0 +1,19 @@
+# state / media
+data/
+
+# python
+apps/server/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+
+# node
+node_modules/
+.next/
+apps/studio/test-results/
+apps/studio/playwright-report/
+
+# misc
+*.log
+.DS_Store
