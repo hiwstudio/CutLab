@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { AssetRow, Job, Op } from "@/lib/types";
+import type { AssetRow, Job } from "@/lib/types";
 import { clipEndMs, isMediaClip } from "@/lib/types";
 import { useEditor } from "@/lib/useEditor";
 import { MediaLibrary } from "./MediaLibrary";
@@ -70,7 +70,7 @@ export function Editor({ projectId }: { projectId: string }) {
           if (start >= s && start < end) start = end;
         }
       }
-      await edRef.current.applyOps([
+      const ok = await edRef.current.applyOps([
         {
           op: "add_clip",
           track: trackId,
@@ -80,12 +80,20 @@ export function Editor({ projectId }: { projectId: string }) {
           start_ms: start,
         },
       ]);
+      if (ok) edRef.current.setPlayhead(start); // preview shows the new clip
+    };
+    const cancel = () => {
+      // Touch scrolling / OS gestures can cancel the pointer mid-drag.
+      assetDragRef.current = null;
+      setAssetDrag(null);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
     };
   }, []);
 
@@ -124,6 +132,29 @@ export function Editor({ projectId }: { projectId: string }) {
 
   const addTrack = (kind: "video" | "audio" | "caption") =>
     ed.applyOps([{ op: "add_track", kind }]);
+
+  // Double-click fallback: append the asset to the first compatible track.
+  const addAssetToTimeline = useCallback(async (asset: AssetRow) => {
+    const s = edRef.current;
+    const wantKind = asset.kind === "audio" ? "audio" : "video";
+    const track = s.edl?.tracks.find((t) => t.kind === wantKind);
+    if (!track) {
+      return;
+    }
+    let start = 0;
+    for (const c of track.clips) start = Math.max(start, clipEndMs(c));
+    const ok = await s.applyOps([
+      {
+        op: "add_clip",
+        track: track.id,
+        asset: asset.asset_id,
+        in_ms: 0,
+        out_ms: asset.duration_ms ?? 3000,
+        start_ms: start,
+      },
+    ]);
+    if (ok) s.setPlayhead(start);
+  }, []);
 
   const addCaption = () => {
     const track = ed.edl?.tracks.find((t) => t.kind === "caption" || t.kind === "text");
@@ -197,6 +228,19 @@ export function Editor({ projectId }: { projectId: string }) {
         </div>
       </header>
 
+      {ed.serverDown && (
+        <div
+          className="flex items-center gap-3 bg-red-900 px-3 py-2 text-sm text-red-100"
+          data-testid="offline-banner"
+        >
+          <span className="font-semibold">CutLab server is offline</span>
+          <span className="text-red-200">
+            Nothing can be saved. Start it with{" "}
+            <code className="rounded bg-red-950 px-1">scripts\dev.ps1</code> — retrying
+            automatically…
+          </span>
+        </div>
+      )}
       {ed.error && (
         <div
           className="flex items-center justify-between bg-red-950 px-3 py-1 text-xs text-red-200"
@@ -218,6 +262,7 @@ export function Editor({ projectId }: { projectId: string }) {
             jobs={ed.jobs}
             onUpload={ed.upload}
             onAssetPointerDown={onAssetPointerDown}
+            onAssetAdd={addAssetToTimeline}
           />
         </div>
         <div className="min-w-0 flex-1">

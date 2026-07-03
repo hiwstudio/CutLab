@@ -189,6 +189,10 @@ export function Timeline({
         data-testid="timeline"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setDrag(null);
+        }}
         onPointerDown={(e) => {
           // Clicking empty timeline space: set playhead, clear selection.
           if ((e.target as HTMLElement).closest("[data-clip-id]")) return;
@@ -232,6 +236,7 @@ export function Timeline({
                       style={{
                         left: clip.start_ms / msPerPx + dragOffsetPx(clip),
                         width: clipWidthPx(clip),
+                        touchAction: "none",
                       }}
                       onPointerDown={(e) => {
                         onSelect(clip.id);

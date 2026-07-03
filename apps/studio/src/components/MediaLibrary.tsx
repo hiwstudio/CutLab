@@ -16,12 +16,14 @@ export function MediaLibrary({
   jobs,
   onUpload,
   onAssetPointerDown,
+  onAssetAdd,
 }: {
   projectId: string;
   assets: AssetRow[];
   jobs: Record<string, Job>;
   onUpload: (file: File) => void;
   onAssetPointerDown: (asset: AssetRow, e: React.PointerEvent) => void;
+  onAssetAdd: (asset: AssetRow) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const ingestJobs = Object.values(jobs).filter((j) => j.kind === "ingest");
@@ -72,7 +74,10 @@ export function MediaLibrary({
               className={`mb-1 flex cursor-grab select-none items-center gap-2 rounded border border-zinc-800 bg-zinc-900 p-2 hover:border-zinc-600 ${
                 a.status !== "ready" ? "opacity-60" : ""
               }`}
+              style={{ touchAction: "none" }}
+              title="Drag onto a track, or double-click to append"
               onPointerDown={(e) => a.status === "ready" && onAssetPointerDown(a, e)}
+              onDoubleClick={() => a.status === "ready" && onAssetAdd(a)}
             >
               {a.kind === "video" && a.status === "ready" ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -102,7 +107,8 @@ export function MediaLibrary({
         })}
       </div>
       <p className="border-t border-zinc-800 p-2 text-[10px] text-zinc-600">
-        Drag a ready asset onto a timeline track.
+        Drag a ready asset onto a timeline track — or double-click it to
+        append to the timeline.
       </p>
     </div>
   );

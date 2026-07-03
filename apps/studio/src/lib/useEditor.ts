@@ -17,6 +17,7 @@ export interface EditorState {
   pxPerSec: number;
   error: string | null;
   busy: boolean;
+  serverDown: boolean;
 }
 
 export interface EditorApi extends EditorState {
@@ -45,8 +46,13 @@ export function useEditor(projectId: string): EditorApi {
   const [pxPerSec, setPxPerSec] = useState(80);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [serverDown, setServerDown] = useState(false);
   const headRevRef = useRef(0);
   headRevRef.current = headRev;
+
+  // fetch() throws TypeError when the server is unreachable.
+  const isNetworkError = (e: unknown) =>
+    e instanceof TypeError || (e instanceof Error && /fetch/i.test(e.message));
 
   const refreshAll = useCallback(async () => {
     const [project, freshEdl, freshAssets, revs] = await Promise.all([
@@ -59,11 +65,24 @@ export function useEditor(projectId: string): EditorApi {
     setEdl(freshEdl);
     setAssets(freshAssets);
     setRevisions(revs);
+    setServerDown(false);
   }, [projectId]);
 
   useEffect(() => {
-    refreshAll().catch((e) => setError(String(e)));
+    refreshAll().catch((e) => {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(String(e));
+    });
   }, [refreshAll]);
+
+  // While offline, probe every 3s and recover automatically.
+  useEffect(() => {
+    if (!serverDown) return;
+    const t = setInterval(() => {
+      refreshAll().catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [serverDown, refreshAll]);
 
   // WS: job progress + external revisions (e.g. ingest registering assets).
   useEffect(() => {
@@ -99,6 +118,8 @@ export function useEditor(projectId: string): EditorApi {
           setError(
             e.issues.length ? `${e.issues[0].code}: ${e.issues[0].message}` : e.message,
           );
+        } else if (isNetworkError(e)) {
+          setServerDown(true);
         } else {
           setError(String(e));
         }
@@ -115,7 +136,8 @@ export function useEditor(projectId: string): EditorApi {
       await api.undo(projectId);
       await refreshAll();
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 422)) setError(String(e));
+      if (isNetworkError(e)) setServerDown(true);
+      else if (!(e instanceof ApiError && e.status === 422)) setError(String(e));
     }
   }, [projectId, refreshAll]);
 
@@ -124,7 +146,8 @@ export function useEditor(projectId: string): EditorApi {
       await api.redo(projectId);
       await refreshAll();
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 422)) setError(String(e));
+      if (isNetworkError(e)) setServerDown(true);
+      else if (!(e instanceof ApiError && e.status === 422)) setError(String(e));
     }
   }, [projectId, refreshAll]);
 
@@ -151,7 +174,8 @@ export function useEditor(projectId: string): EditorApi {
         await api.uploadAsset(projectId, file);
         await refreshAssets();
       } catch (e) {
-        setError(String(e));
+        if (isNetworkError(e)) setServerDown(true);
+        else setError(String(e));
       }
     },
     [projectId, refreshAssets],
@@ -180,6 +204,7 @@ export function useEditor(projectId: string): EditorApi {
     pxPerSec,
     error,
     busy,
+    serverDown,
     applyOps,
     undo,
     redo,
