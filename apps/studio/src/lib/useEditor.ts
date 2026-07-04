@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, connectWs, WsEvent } from "./api";
-import type { AssetRow, EDL, Job, Op, RevisionRow } from "./types";
+import type { AssetRow, EDL, Job, Op, RevisionRow, Understanding } from "./types";
 
 export interface EditorState {
   projectId: string;
@@ -31,6 +31,8 @@ export interface EditorApi extends EditorState {
   refreshAssets: () => Promise<void>;
   upload: (file: File) => Promise<void>;
   startRender: () => Promise<string | null>;
+  analyze: (assetId: string) => Promise<string | null>;
+  loadUnderstanding: (assetId: string) => Promise<Understanding | null>;
   clearError: () => void;
 }
 
@@ -191,6 +193,31 @@ export function useEditor(projectId: string): EditorApi {
     }
   }, [projectId]);
 
+  const analyze = useCallback(
+    async (assetId: string): Promise<string | null> => {
+      try {
+        const r = await api.analyzeAsset(projectId, assetId);
+        return r.job_id;
+      } catch (e) {
+        if (isNetworkError(e)) setServerDown(true);
+        else setError(e instanceof ApiError ? e.message : String(e));
+        return null;
+      }
+    },
+    [projectId],
+  );
+
+  const loadUnderstanding = useCallback(
+    async (assetId: string): Promise<Understanding | null> => {
+      try {
+        return await api.getUnderstanding(projectId, assetId);
+      } catch {
+        return null;
+      }
+    },
+    [projectId],
+  );
+
   return {
     projectId,
     edl,
@@ -215,6 +242,8 @@ export function useEditor(projectId: string): EditorApi {
     refreshAssets,
     upload,
     startRender,
+    analyze,
+    loadUnderstanding,
     clearError: () => setError(null),
   };
 }

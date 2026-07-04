@@ -17,6 +17,8 @@ export function MediaLibrary({
   onUpload,
   onAssetPointerDown,
   onAssetAdd,
+  onAnalyze,
+  onViewUnderstanding,
 }: {
   projectId: string;
   assets: AssetRow[];
@@ -24,9 +26,12 @@ export function MediaLibrary({
   onUpload: (file: File) => void;
   onAssetPointerDown: (asset: AssetRow, e: React.PointerEvent) => void;
   onAssetAdd: (asset: AssetRow) => void;
+  onAnalyze: (asset: AssetRow) => void;
+  onViewUnderstanding: (asset: AssetRow) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const ingestJobs = Object.values(jobs).filter((j) => j.kind === "ingest");
+  const analyzeJobs = Object.values(jobs).filter((j) => j.kind === "understanding");
 
   return (
     <div className="flex h-full flex-col border-r border-zinc-800 bg-zinc-950">
@@ -101,6 +106,18 @@ export function MediaLibrary({
                       ? "ingest failed"
                       : `ingesting… ${job ? Math.round(job.progress * 100) + "%" : ""}`}
                 </p>
+                {a.status === "ready" && (
+                  <AnalyzeControl
+                    asset={a}
+                    job={analyzeJobs.find(
+                      (j) =>
+                        (j as Job & { asset_id?: string }).asset_id === a.asset_id &&
+                        j.state !== "done" && j.state !== "failed",
+                    )}
+                    onAnalyze={onAnalyze}
+                    onView={onViewUnderstanding}
+                  />
+                )}
               </div>
             </div>
           );
@@ -110,6 +127,63 @@ export function MediaLibrary({
         Drag a ready asset onto a timeline track — or double-click it to
         append to the timeline.
       </p>
+    </div>
+  );
+}
+
+function AnalyzeControl({
+  asset,
+  job,
+  onAnalyze,
+  onView,
+}: {
+  asset: AssetRow;
+  job?: Job;
+  onAnalyze: (a: AssetRow) => void;
+  onView: (a: AssetRow) => void;
+}) {
+  const analyzing = job && (job.state === "queued" || job.state === "running");
+  const analyzed = !!asset.understanding;
+
+  if (analyzing) {
+    return (
+      <div className="mt-1 flex items-center gap-1" data-testid={`analyze-progress-${asset.asset_id}`}>
+        <div className="h-1 flex-1 overflow-hidden rounded bg-zinc-800">
+          <div
+            className="h-full bg-sky-500 transition-all"
+            style={{ width: `${Math.round((job?.progress ?? 0) * 100)}%` }}
+          />
+        </div>
+        <span className="text-[9px] text-sky-300">
+          {job?.stage ?? "analyzing"}…
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <button
+        data-testid={`analyze-${asset.asset_id}`}
+        className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-zinc-700"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAnalyze(asset);
+        }}
+      >
+        {analyzed ? "Re-analyze" : "Analyze"}
+      </button>
+      {analyzed && (
+        <button
+          data-testid={`view-understanding-${asset.asset_id}`}
+          className="rounded bg-sky-900/60 px-1.5 py-0.5 text-[10px] text-sky-200 hover:bg-sky-800"
+          onClick={(e) => {
+            e.stopPropagation();
+            onView(asset);
+          }}
+        >
+          ✓ Insights
+        </button>
+      )}
     </div>
   );
 }

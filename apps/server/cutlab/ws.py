@@ -62,6 +62,8 @@ class WsHub:
             "id": job["id"], "kind": job["kind"], "project_id": job["project_id"],
             "state": job["state"], "stage": job["stage"], "progress": job["progress"],
             "error": job["error"], "artifacts": job.get("artifacts", {}),
+            # asset_id lets the UI map ingest/understanding jobs to their asset.
+            "asset_id": (job.get("input") or {}).get("asset_id"),
         }}
         self._send_threadsafe(job.get("project_id"), payload)
 

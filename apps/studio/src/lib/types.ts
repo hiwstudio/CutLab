@@ -32,6 +32,7 @@ export interface AssetRow {
   duration_ms?: number | null;
   width?: number | null;
   height?: number | null;
+  understanding?: string | null;
   status: "ingesting" | "ready" | "failed";
 }
 
@@ -89,6 +90,7 @@ export interface Job {
   id: string;
   kind: string;
   project_id: string | null;
+  asset_id?: string | null;
   state: "queued" | "running" | "done" | "failed" | "cancelled";
   stage: string | null;
   progress: number;
@@ -102,6 +104,27 @@ export interface RevisionRow {
   state: "committed" | "proposed" | "rejected";
   summary: string;
   created_at: string;
+}
+
+export interface Understanding {
+  version: string;
+  asset_id: string;
+  kind: string;
+  duration_ms: number;
+  transcript?: {
+    language?: string | null;
+    segments: { start_ms: number; end_ms: number; text: string; words: unknown[] }[];
+  } | null;
+  scenes: { index: number; start_ms: number; end_ms: number }[];
+  silence: { start_ms: number; end_ms: number }[];
+  active_ranges: { start_ms: number; end_ms: number }[];
+  beats_ms: number[];
+  tempo_bpm?: number | null;
+  saliency?: {
+    profile: string;
+    window_ms: number;
+    windows: { start_ms: number; end_ms: number; score: number }[];
+  } | null;
 }
 
 export type Op = { op: string } & Record<string, unknown>;

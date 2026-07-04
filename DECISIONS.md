@@ -3,6 +3,45 @@
 Ambiguity resolutions, per B3's instruction to choose the simplest interpretation
 consistent with A2 and keep moving.
 
+## Phase 1 — Understanding Layer
+
+A11 specifies P1 as one line ("faster-whisper, PySceneDetect, silencedetect,
+librosa beats, saliency v1 with per-profile weights") — no Part-B-style detailed
+build spec. Resolutions:
+
+- **Scope boundary**: P1 builds the layer that *produces* understanding data only.
+  The ops that *consume* it (`remove_silence`, `caption_from_transcript`, `reframe`)
+  are explicitly P2 in A11 and stay `E_NOT_IMPLEMENTED`. No AI/LLM (P2), no Remotion,
+  no compaction. Minimal UI surfacing (an Analyze trigger + status/counts) so the
+  data is observable without building P2's consumption.
+- **Scene detection uses the ffmpeg `scene` filter, not PySceneDetect.** The owner's
+  recap-engine (the reuse source per CLAUDE.md) already detects scenes with
+  `select='gt(scene,thr)',showinfo` — classical, deterministic, zero extra
+  dependency — and it's proven in production. A2.7 (determinism) and the reuse
+  principle both favour it over adding PySceneDetect. Same thresholds as recap-engine
+  (SCENE_THRESHOLD 0.30, SCENE_MIN_LEN 1.5s).
+- **Silence** reuses viral-clip-engine's `silencedetect=noise=-30dB:d=0.6` approach
+  verbatim (spec literally names `silencedetect`), plus its active-range
+  padding/merge logic, exposed as data (spans + active ranges) — no cutting here
+  (cutting is `remove_silence`, a P2 op).
+- **Transcription** reuses both engines' faster-whisper config (model `small`, device
+  `auto`, compute `auto`, `word_timestamps=True, vad_filter=True`, audio pre-extracted
+  as 16 kHz mono pcm_s16le). Model id/device overridable via `CUTLAB_WHISPER_*` env.
+- **Beats**: librosa (with numba) **did** install cleanly on Python 3.14, so
+  `librosa.beat.beat_track` is the primary path. The numpy-only onset-strength +
+  autocorrelation-tempo tracker is kept as an automatic fallback (used if librosa
+  is absent or raises), and it's independently tested on a click track — so beats
+  never hard-fail on a thinner environment. The numpy tempo estimate needed a
+  log-normal 120-BPM prior to fix pulse-train octave ambiguity (60 vs 120 BPM),
+  and the reported tempo is derived from detected beat spacing for self-consistency.
+- **Understanding artifacts are content, not deterministic renders.** A2.7's
+  byte-stability rule targets render output; whisper/VAD results are not byte-stable.
+  The artifact carries the model id + parameters used, for provenance.
+- **Understanding enters the EDL via an op**, mirroring ingest's `add_asset`: a new
+  `set_understanding` op sets `asset.understanding` to the artifact path (A2.2 — ops
+  are the only mutation path). It is a Phase-1 op, not one of A5's later-phase enum
+  entries.
+
 ## Environment
 
 - **ffmpeg resolution**: ImageMagick ships an ancient ffmpeg 4.2.3 that shadows the

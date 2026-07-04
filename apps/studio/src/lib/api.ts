@@ -8,6 +8,7 @@ import type {
   Op,
   Project,
   RevisionRow,
+  Understanding,
 } from "./types";
 
 export const API_BASE =
@@ -82,6 +83,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(rev !== undefined ? { rev } : {}),
     }),
+  analyzeAsset: (id: string, assetId: string) =>
+    request<{ asset_id: string; job_id: string; status: string }>(
+      `/api/v1/projects/${id}/assets/${assetId}/analyze`,
+      { method: "POST" },
+    ),
+  getUnderstanding: (id: string, assetId: string) =>
+    request<Understanding>(
+      `/api/v1/projects/${id}/assets/${assetId}/understanding`,
+    ),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
 };
 

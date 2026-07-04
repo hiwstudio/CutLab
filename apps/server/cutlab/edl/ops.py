@@ -518,6 +518,28 @@ class AddAsset(_OpBase):
         return f"register asset {self.asset_id} ({self.kind}: {self.src})"
 
 
+class SetUnderstanding(_OpBase):
+    """Phase 1 op: point an asset at its understanding artifact.
+
+    Like add_asset, this is a server-internal registration op (the understanding
+    job applies it on completion) so the `understanding` field enters the EDL via
+    the op path (A2.2), never by a direct snapshot write.
+    """
+
+    op: Literal["set_understanding"]
+    asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
+    understanding: str = Field(min_length=1)
+
+    def apply(self, edl: EDL) -> str:
+        asset = edl.assets.get(self.asset)
+        if asset is None:
+            raise OpError("E_REF", "asset", f"asset {self.asset} not found")
+        if asset.understanding == self.understanding:
+            raise OpError("E_NOOP", "understanding", "already set to this path")
+        asset.understanding = self.understanding
+        return f"set understanding for {self.asset}"
+
+
 # -- later-phase ops: enum defined now, E_NOT_IMPLEMENTED on apply ------------
 
 LATER_PHASE_OPS = (
@@ -539,7 +561,7 @@ Op = Annotated[
     Union[
         AddTrack, RemoveTrack, AddClip, RemoveClip, Trim, Split, Move,
         DeleteRange, SetSpeed, SetGain, SetTransform, SetCrop, SetCanvas,
-        AddCaption, SetProject, AddAsset, LaterPhaseOp,
+        AddCaption, SetProject, AddAsset, SetUnderstanding, LaterPhaseOp,
     ],
     Field(discriminator="op"),
 ]

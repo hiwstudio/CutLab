@@ -24,6 +24,7 @@ from .edl.engine import Conflict, Engine, NotFound, Rejected
 from .edl.schema import LEGAL_FPS
 from .jobs.ingest import ingest_handler
 from .jobs.queue import JobQueue
+from .jobs.understanding import understanding_handler
 from .jobs.worker import Worker
 from .render.runner import render_handler
 from .util import paths
@@ -86,6 +87,7 @@ class AppState:
         self.worker = Worker(self.db, self.queue)
         self.worker.register("ingest", ingest_handler)
         self.worker.register("render", render_handler)
+        self.worker.register("understanding", understanding_handler)
         self._start_worker = start_worker
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
@@ -233,10 +235,45 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
         state.engine.get_project(project_id)
         rows = state.db.query(
             "SELECT project_id, asset_id, kind, src, proxy, duration_ms, width,"
-            " height, status FROM assets WHERE project_id=? ORDER BY rowid",
+            " height, understanding, status FROM assets WHERE project_id=? ORDER BY rowid",
             (project_id,),
         )
         return rows
+
+    # -- understanding (P1) -----------------------------------------------------
+
+    @api.post("/projects/{project_id}/assets/{asset_id}/analyze")
+    async def analyze_asset(project_id: str, asset_id: str):
+        state.engine.get_project(project_id)
+        row = state.db.query_one(
+            "SELECT kind, src, status FROM assets WHERE project_id=? AND asset_id=?",
+            (project_id, asset_id),
+        )
+        if row is None:
+            return error_response(404, "E_NOT_FOUND", f"asset {asset_id} not found")
+        if row["status"] != "ready":
+            return error_response(409, "E_NOT_READY", "asset is still ingesting")
+        job_id = state.queue.enqueue("understanding", {
+            "project_id": project_id, "asset_id": asset_id, "kind": row["kind"],
+            "src": row["src"], "project_dir": str(state.projects_dir / project_id),
+        }, project_id=project_id)
+        return {"asset_id": asset_id, "job_id": job_id, "status": "analyzing"}
+
+    @api.get("/projects/{project_id}/assets/{asset_id}/understanding")
+    async def get_understanding(project_id: str, asset_id: str):
+        state.engine.get_project(project_id)
+        row = state.db.query_one(
+            "SELECT understanding FROM assets WHERE project_id=? AND asset_id=?",
+            (project_id, asset_id),
+        )
+        if row is None:
+            return error_response(404, "E_NOT_FOUND", f"asset {asset_id} not found")
+        if not row["understanding"]:
+            return error_response(404, "E_NOT_ANALYZED", "asset has no understanding yet")
+        path = paths.safe_join(state.projects_dir / project_id, row["understanding"])
+        if not path.is_file():
+            return error_response(404, "E_NOT_FOUND", "understanding artifact missing")
+        return json.loads(path.read_text(encoding="utf-8"))
 
     # -- render / jobs ----------------------------------------------------------
 

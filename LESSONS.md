@@ -62,6 +62,30 @@ Python for text edits; keep PS to process/port management.
 `created_at` has millisecond resolution; two enqueues in the same ms tie and
 break FIFO. `rowid` is insertion order and free.
 
+## Injectable-dependency defaults must resolve at call time, not def time
+`def f(load_model=_real_loader)` binds the default once at definition, so
+monkeypatching the module attribute later has no effect — the understanding job
+kept running real whisper despite a fake being patched in. Use `load_model=None`
+and resolve `(load_model or _real_loader)()` inside the body (name lookup at call
+time). Applies to any injected-for-testability heavy dependency.
+
+## Tempo estimation needs an octave prior
+A regular pulse train's autocorrelation peaks equally at the period and its
+multiples, so naive argmax picks 60 BPM for a 120 BPM track. Fix: weight the
+autocorrelation by a log-normal prior centered at 120 BPM, and derive the final
+tempo from the median detected beat spacing for self-consistency (beats.py).
+
+## Additive SQLite migrations for a shipped DB
+Adding a column (assets.understanding) to a DB real projects already use needs a
+guarded `ALTER TABLE ADD COLUMN` on connect (PRAGMA table_info check), not just a
+new CREATE — existing rows must gain the column without data loss (db.py `_migrate`).
+
+## Prefer the owner's proven ffmpeg approach over a heavier named dependency
+The spec named PySceneDetect, but recap-engine already does scene detection with
+the classical ffmpeg `scene` filter — deterministic, zero extra dependency, and
+production-proven. Reuse principle + A2.7 favored it. Check the existing engines
+before pulling a new library the spec merely names.
+
 ## Playwright starts webServers before globalSetup
 Global setup cannot wipe a data dir the API webServer already holds open
 (SQLite lock). Treat webServer-owned state as append-only from setup code.

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS assets (
   kind TEXT NOT NULL, src TEXT NOT NULL, proxy TEXT,
   duration_ms INTEGER, width INTEGER, height INTEGER,
   probe_json TEXT,
+  understanding TEXT,              -- path to understanding JSON (P1); NULL until analyzed
   status TEXT NOT NULL CHECK(status IN ('ingesting','ready','failed')),
   PRIMARY KEY (project_id, asset_id)
 );
@@ -68,7 +69,14 @@ class Database:
         self._conn.execute("PRAGMA busy_timeout=5000")
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate()
             self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Additive migrations for DBs created before a column existed."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(assets)")}
+        if "understanding" not in cols:  # added in Phase 1
+            self._conn.execute("ALTER TABLE assets ADD COLUMN understanding TEXT")
 
     def close(self) -> None:
         with self._lock:

@@ -372,6 +372,29 @@ def test_add_caption_only_on_caption_tracks(engine: Engine, project: str):
     assert exc.value.issues[0].code == "E_KIND"
 
 
+def test_set_understanding(engine: Engine, project: str):
+    r = apply(engine, project, [
+        {"op": "set_understanding", "asset": "ast_v1",
+         "understanding": "understanding/ast_v1.understanding.json"},
+    ])
+    assert r["edl"]["assets"]["ast_v1"]["understanding"] == \
+        "understanding/ast_v1.understanding.json"
+    # Idempotent re-set is rejected as a no-op (register loop treats this as done).
+    with pytest.raises(Rejected) as exc:
+        apply(engine, project, [
+            {"op": "set_understanding", "asset": "ast_v1",
+             "understanding": "understanding/ast_v1.understanding.json"},
+        ])
+    assert exc.value.issues[0].code == "E_NOOP"
+    # Unknown asset -> E_REF.
+    with pytest.raises(Rejected) as exc:
+        apply(engine, project, [
+            {"op": "set_understanding", "asset": "ast_none",
+             "understanding": "u.json"},
+        ])
+    assert exc.value.issues[0].code == "E_REF"
+
+
 def test_later_phase_ops_not_implemented(engine: Engine, project: str):
     for op in ("remove_silence", "compact", "caption_from_transcript", "reorder"):
         with pytest.raises(Rejected) as exc:

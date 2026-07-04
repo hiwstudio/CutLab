@@ -5,10 +5,12 @@ import Link from "next/link";
 import type { AssetRow, Job } from "@/lib/types";
 import { clipEndMs, isMediaClip } from "@/lib/types";
 import { useEditor } from "@/lib/useEditor";
+import type { Understanding } from "@/lib/types";
 import { MediaLibrary } from "./MediaLibrary";
 import { Preview } from "./Preview";
 import { RevisionStrip } from "./RevisionStrip";
 import { Timeline } from "./Timeline";
+import { UnderstandingPanel } from "./UnderstandingPanel";
 
 interface AssetDrag {
   asset: AssetRow;
@@ -20,6 +22,7 @@ export function Editor({ projectId }: { projectId: string }) {
   const ed = useEditor(projectId);
   const [assetDrag, setAssetDrag] = useState<AssetDrag | null>(null);
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
+  const [insights, setInsights] = useState<{ name: string; u: Understanding } | null>(null);
   const assetDragRef = useRef<AssetDrag | null>(null);
 
   const readOnly = ed.viewRev !== null;
@@ -172,6 +175,17 @@ export function Editor({ projectId }: { projectId: string }) {
     if (jobId) setRenderJobId(jobId);
   };
 
+  const onAnalyze = (asset: AssetRow) => {
+    ed.analyze(asset.asset_id);
+  };
+
+  const onViewUnderstanding = async (asset: AssetRow) => {
+    const u = await ed.loadUnderstanding(asset.asset_id);
+    if (u) {
+      setInsights({ name: asset.src.split("/").pop() ?? asset.asset_id, u });
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
       {/* header */}
@@ -263,6 +277,8 @@ export function Editor({ projectId }: { projectId: string }) {
             onUpload={ed.upload}
             onAssetPointerDown={onAssetPointerDown}
             onAssetAdd={addAssetToTimeline}
+            onAnalyze={onAnalyze}
+            onViewUnderstanding={onViewUnderstanding}
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -308,6 +324,14 @@ export function Editor({ projectId }: { projectId: string }) {
           onOps={ed.applyOps}
         />
       </div>
+
+      {insights && (
+        <UnderstandingPanel
+          name={insights.name}
+          understanding={insights.u}
+          onClose={() => setInsights(null)}
+        />
+      )}
 
       {/* asset drag ghost */}
       {assetDrag && (

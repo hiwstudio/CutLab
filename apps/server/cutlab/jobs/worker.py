@@ -76,6 +76,7 @@ def main() -> None:
 
     from .. import config
     from .ingest import ingest_handler
+    from .understanding import understanding_handler
     from ..render.runner import render_handler
 
     parser = argparse.ArgumentParser()
@@ -89,6 +90,7 @@ def main() -> None:
     worker = Worker(db, queue)
     worker.register("ingest", ingest_handler)
     worker.register("render", render_handler)
+    worker.register("understanding", understanding_handler)
     queue.recover_on_start()
     if args.once:
         while worker.run_one():
