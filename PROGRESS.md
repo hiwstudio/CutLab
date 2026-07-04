@@ -20,8 +20,12 @@
 - [x] 5 Optimistic locking — `tests/test_api.py::test_optimistic_locking_concurrent` (200 + 409)
 - [x] 6 UI smoke (Playwright) — `apps/studio/tests/smoke.spec.ts`
       (create → upload → ingest → drag → split → trim → undo → render → file exists)
-- [ ] 7 Manual: ingest a real long video → proxy scrubs, waveform + thumbs visible
-- [ ] 8 Manual: 3-clip cut in the UI, render, cuts land exactly
-- [ ] 9 Manual: kill server mid-render, restart, render resumes and completes
+- [x] 7 Manual: ingest a real long video → proxy scrubs, waveform + thumbs visible
+- [x] 8 Manual: 3-clip cut in the UI, render, cuts land exactly
+- [x] 9 Manual: kill server mid-render, restart, render resumes and completes
 
-Tests 7–9 are the human's to run (see README → Run).
+Tests 7–9 run and confirmed by the owner on 2026-07-04.
+
+**Phase 0 complete — all nine acceptance tests pass.** Next phase starts only on
+the owner's request (P1 understanding layer; see docs/HANDOFF.md §A11 and the
+engine-reuse map in CLAUDE.md).
