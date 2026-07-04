@@ -9,7 +9,8 @@ Pure module: no I/O, no DB. Id generation is injected so tests can pin ids.
 from __future__ import annotations
 
 import math
-from typing import Annotated, Any, Callable, Literal, Union
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
@@ -28,6 +29,9 @@ from .schema import (
     timeline_len_ms,
 )
 
+if TYPE_CHECKING:
+    from ..understanding.schema import Understanding
+
 
 class OpError(Exception):
     def __init__(self, code: str, path: str, message: str):
@@ -35,6 +39,25 @@ class OpError(Exception):
         self.code = code
         self.path = path
         self.message = message
+
+
+@dataclass
+class OpContext:
+    """Read-only side data an op may need beyond the EDL. Populated by the
+    engine before apply (it loads referenced understanding artifacts). Smart
+    ops (remove_silence, caption_from_transcript) read `understanding`; primitive
+    ops ignore it. Keeps op.apply a pure function of (edl, ctx)."""
+
+    understanding: dict[str, "Understanding"] = field(default_factory=dict)
+
+    def require_understanding(self, asset_id: str) -> "Understanding":
+        u = self.understanding.get(asset_id)
+        if u is None:
+            raise OpError(
+                "E_NO_UNDERSTANDING", "asset",
+                f"asset {asset_id} has no understanding; analyze it first",
+            )
+        return u
 
 
 # -- helpers -----------------------------------------------------------------
@@ -131,7 +154,7 @@ class AddTrack(_OpBase):
     index: int | None = None
     id: str | None = Field(default=None, pattern=r"^trk_[a-z0-9]{2,12}$")
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track_id = self.id or ids.new_track_id()
         if edl.find_track(track_id):
             raise OpError("E_DUP", "id", f"track {track_id} already exists")
@@ -145,7 +168,7 @@ class RemoveTrack(_OpBase):
     op: Literal["remove_track"]
     track: str
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         t = _track(edl, self.track)
         edl.tracks.remove(t)
         return f"remove track {t.id} ({len(t.clips)} clips)"
@@ -166,7 +189,7 @@ class AddClip(_OpBase):
     transition_out: TransitionOut | None = None
     id: str | None = Field(default=None, pattern=r"^clp_[a-z0-9]{2,12}$")
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track = _track(edl, self.track)
         if track.kind not in ("video", "audio"):
             raise OpError("E_KIND", "track", f"add_clip targets media tracks, not '{track.kind}'")
@@ -190,7 +213,7 @@ class RemoveClip(_OpBase):
     clip: str
     ripple: bool = False
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track, clip = _clip(edl, self.clip)
         start, end = _clip_span(clip)
         track.clips.remove(clip)
@@ -207,7 +230,7 @@ class Trim(_OpBase):
     new_out_ms: int | None = Field(default=None, gt=0)
     edge_mode: Literal["hold_start", "hold_end"] = "hold_start"
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         if self.new_in_ms is None and self.new_out_ms is None:
             raise OpError("E_SCHEMA", "trim", "trim requires new_in_ms and/or new_out_ms")
         track, clip = _media_clip(edl, self.clip)
@@ -231,7 +254,7 @@ class Split(_OpBase):
     at_ms: int = Field(ge=0)  # timeline coords
     new_id: str | None = Field(default=None, pattern=r"^clp_[a-z0-9]{2,12}$")
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track, clip = _clip(edl, self.clip)
         start, end = _clip_span(clip)
         if not (start < self.at_ms < end):
@@ -271,7 +294,7 @@ class Move(_OpBase):
     to_start_ms: int = Field(ge=0)
     to_track: str | None = None
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track, clip = _clip(edl, self.clip)
         dest = track if self.to_track is None else _track(edl, self.to_track)
         if dest is not track:
@@ -300,7 +323,7 @@ class DeleteRange(_OpBase):
     to_ms: int = Field(gt=0)
     ripple: bool = True
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         if self.from_ms >= self.to_ms:
             raise OpError("E_RANGE", "delete_range", "from_ms must be < to_ms")
         targets = edl.tracks if self.tracks == "all" else [_track(edl, t) for t in self.tracks]
@@ -385,7 +408,7 @@ class SetSpeed(_OpBase):
     speed: float = Field(ge=0.1, le=10.0)
     ripple: bool = False
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track, clip = _media_clip(edl, self.clip)
         old_len = clip.timeline_len_ms()
         clip.speed = self.speed
@@ -401,7 +424,7 @@ class SetGain(_OpBase):
     clip: str
     gain_db: float = Field(ge=-60.0, le=12.0)
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         _, clip = _media_clip(edl, self.clip)
         clip.gain_db = self.gain_db
         return f"set gain of {clip.id} to {self.gain_db}dB"
@@ -412,7 +435,7 @@ class SetTransform(_OpBase):
     clip: str
     transform: dict[str, Any]  # partial; merge semantics
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         _, clip = _media_clip(edl, self.clip)
         current = clip.transform.model_dump() if clip.transform else {}
         current.update(self.transform)
@@ -428,7 +451,7 @@ class SetCrop(_OpBase):
     clip: str
     crop: Crop
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         _, clip = _media_clip(edl, self.clip)
         clip.crop = self.crop
         return f"set crop of {clip.id} ({self.crop.mode})"
@@ -440,7 +463,7 @@ class SetCanvas(_OpBase):
     height: int
     fps: float
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         try:
             edl.project.canvas = Canvas(width=self.width, height=self.height, fps=self.fps)
         except Exception as e:
@@ -457,7 +480,7 @@ class AddCaption(_OpBase):
     cap_style: str | None = None
     id: str | None = Field(default=None, pattern=r"^clp_[a-z0-9]{2,12}$")
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track = _track(edl, self.track)
         if track.kind not in ("caption", "text"):
             raise OpError("E_KIND", "track", "add_caption targets caption/text tracks only")
@@ -479,7 +502,7 @@ class SetProject(_OpBase):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     profile: str | None = None
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         changes = []
         if self.name is not None:
             edl.project.name = self.name
@@ -506,7 +529,7 @@ class AddAsset(_OpBase):
     width: int | None = Field(default=None, gt=0)
     height: int | None = Field(default=None, gt=0)
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         from .schema import Asset
 
         if self.asset_id in edl.assets:
@@ -530,7 +553,7 @@ class SetUnderstanding(_OpBase):
     asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
     understanding: str = Field(min_length=1)
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         asset = edl.assets.get(self.asset)
         if asset is None:
             raise OpError("E_REF", "asset", f"asset {self.asset} not found")
@@ -540,12 +563,97 @@ class SetUnderstanding(_OpBase):
         return f"set understanding for {self.asset}"
 
 
+# -- smart ops (P2 first tier): consume understanding via OpContext -----------
+
+
+def _apply_primitive_ops(edl: EDL, op_dicts: list[dict[str, Any]], ctx: OpContext | None) -> int:
+    """Apply a planner's primitive-op dicts to the working EDL in sequence.
+    Used by smart ops that expand into primitives. Any primitive failure raises
+    OpError, which the engine turns into a whole-plan rejection (transactional)."""
+    for d in op_dicts:
+        sub = parse_ops([d])[0]
+        sub.apply(edl, ctx)
+    return len(op_dicts)
+
+
+class RemoveSilence(_OpBase):
+    op: Literal["remove_silence"]
+    asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
+    tracks: list[str] | None = None       # None = all tracks
+    min_ms: int = Field(default=300, ge=0)  # ignore silences shorter than this
+    ripple: bool = True
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from .smartops import plan_remove_silence
+
+        if ctx is None:
+            raise OpError("E_NO_UNDERSTANDING", "asset", "no op context available")
+        u = ctx.require_understanding(self.asset)
+        plan = plan_remove_silence(edl, u, self.asset, self.tracks, self.min_ms, self.ripple)
+        _apply_primitive_ops(edl, plan, ctx)
+        return f"remove silence from {self.asset}: {len(plan)} cut(s)"
+
+
+class CaptionFromTranscript(_OpBase):
+    op: Literal["caption_from_transcript"]
+    asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
+    track: str                             # target caption/text track
+    max_words: int = Field(default=6, ge=1, le=20)
+    max_gap_ms: int = Field(default=700, ge=0)
+    cap_style: str | None = None
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from .smartops import plan_caption_from_transcript
+
+        if ctx is None:
+            raise OpError("E_NO_UNDERSTANDING", "asset", "no op context available")
+        track = _track(edl, self.track)
+        if track.kind not in ("caption", "text"):
+            raise OpError("E_KIND", "track", "caption_from_transcript targets caption/text tracks")
+        u = ctx.require_understanding(self.asset)
+        plan = plan_caption_from_transcript(
+            edl, u, self.asset, self.track, self.max_words, self.max_gap_ms, self.cap_style,
+        )
+        _apply_primitive_ops(edl, plan, ctx)
+        return f"caption {self.asset} -> {len(plan)} caption(s) on {self.track}"
+
+
+class Reframe(_OpBase):
+    """Basic center reframe: change the canvas and center-crop affected video
+    clips. The Phase-0 render already center-crops to the canvas aspect.
+    (`reframe_auto` — subject tracking — stays later-phase; needs vision.)"""
+
+    op: Literal["reframe"]
+    width: int
+    height: int
+    fps: float | None = None
+    tracks: list[str] | None = None        # None = all video tracks
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        fps = self.fps if self.fps is not None else edl.project.canvas.fps
+        primitives: list[dict[str, Any]] = [
+            {"op": "set_canvas", "width": self.width, "height": self.height, "fps": fps},
+        ]
+        target = edl.tracks if self.tracks is None else [
+            t for t in edl.tracks if t.id in set(self.tracks)
+        ]
+        count = 0
+        for t in target:
+            if t.kind != "video":
+                continue
+            for c in t.clips:
+                if isinstance(c, MediaClip):
+                    primitives.append({"op": "set_crop", "clip": c.id, "crop": {"mode": "center"}})
+                    count += 1
+        _apply_primitive_ops(edl, primitives, ctx)
+        return f"reframe to {self.width}x{self.height} (center-crop {count} clip(s))"
+
+
 # -- later-phase ops: enum defined now, E_NOT_IMPLEMENTED on apply ------------
 
 LATER_PHASE_OPS = (
-    "caption_from_transcript", "remove_silence", "duck", "denoise", "fade",
-    "apply_effect", "add_transition", "reframe", "find", "compact",
-    "add_emphasis", "apply_style", "reorder",
+    "duck", "denoise", "fade", "apply_effect", "add_transition",
+    "find", "compact", "add_emphasis", "apply_style", "reorder",
 )
 
 
@@ -553,7 +661,7 @@ class LaterPhaseOp(_OpBase):
     model_config = ConfigDict(extra="allow")
     op: Literal[LATER_PHASE_OPS]  # type: ignore[valid-type]
 
-    def apply(self, edl: EDL) -> str:
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         raise OpError("E_NOT_IMPLEMENTED", "op", f"op '{self.op}' is a later phase")
 
 
@@ -561,7 +669,8 @@ Op = Annotated[
     Union[
         AddTrack, RemoveTrack, AddClip, RemoveClip, Trim, Split, Move,
         DeleteRange, SetSpeed, SetGain, SetTransform, SetCrop, SetCanvas,
-        AddCaption, SetProject, AddAsset, SetUnderstanding, LaterPhaseOp,
+        AddCaption, SetProject, AddAsset, SetUnderstanding,
+        RemoveSilence, CaptionFromTranscript, Reframe, LaterPhaseOp,
     ],
     Field(discriminator="op"),
 ]

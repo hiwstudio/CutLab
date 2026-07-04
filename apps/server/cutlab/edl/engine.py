@@ -133,10 +133,11 @@ class Engine:
 
         before = EDL.model_validate(self.get_edl(project_id, head))
         working = before.model_copy(deep=True)
+        ctx = self._build_op_context(project_id, working)
         summaries: list[str] = []
         try:
             for op in ops:
-                summaries.append(op.apply(working))
+                summaries.append(op.apply(working, ctx))
         except OpError as e:
             raise Rejected([Issue(e.code, e.path, e.message)]) from e
 
@@ -220,6 +221,29 @@ class Engine:
         return rev
 
     # -- helpers --------------------------------------------------------------
+
+    def _build_op_context(self, project_id: str, edl: EDL) -> "OpContext":
+        """Load understanding artifacts for assets that have one, so smart ops
+        (remove_silence, caption_from_transcript) can read them. Missing/broken
+        artifacts are simply absent from the map — the op reports E_NO_UNDERSTANDING."""
+        from ..understanding.schema import Understanding
+        from .ops import OpContext
+
+        understanding: dict[str, Understanding] = {}
+        base = self._base_dir(project_id)
+        if base is not None:
+            for asset_id, asset in edl.assets.items():
+                if not asset.understanding:
+                    continue
+                try:
+                    path = base / asset.understanding
+                    if path.is_file():
+                        understanding[asset_id] = Understanding.model_validate_json(
+                            path.read_text(encoding="utf-8")
+                        )
+                except Exception:
+                    continue
+        return OpContext(understanding=understanding)
 
     def _base_dir(self, project_id: str) -> Path | None:
         if self.projects_dir is None:

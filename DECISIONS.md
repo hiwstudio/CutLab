@@ -42,6 +42,40 @@ build spec. Resolutions:
   are the only mutation path). It is a Phase-1 op, not one of A5's later-phase enum
   entries.
 
+## Phase 2 — AI Director (in progress)
+
+A11 scopes P2 as: AI Director v1 (context compiler, plan→propose→accept loop,
+first smart ops incl. remove_silence, caption_from_transcript, reframe). Build
+order chosen: the deterministic foundation first (smart ops + accept/reject loop,
+neither needs an LLM), then the LLM director on top.
+
+- **Smart ops consume understanding via an `OpContext`, not file I/O in apply.**
+  Ops must stay pure (A2). The three smart ops need Phase-1 understanding data,
+  which lives in `asset.understanding` files. Resolution: the *logic* is pure
+  planner functions `(edl, understanding) → mutations`, and op `apply` gains an
+  optional `OpContext` (an in-memory `{asset_id: Understanding}` map) that the
+  engine populates by loading the referenced artifacts before apply. Purity is
+  preserved (apply is a pure function of edl + ctx); tests pass ctx directly.
+- **remove_silence** deletes the silent timeline ranges of a target asset's clips
+  using the understanding silence spans (mapped from source time to timeline time,
+  respecting each clip's in/out/speed), via the existing delete_range semantics
+  (ripple to close gaps). It does not re-cut media — it edits the EDL, and the
+  Phase-0 render realizes it.
+- **caption_from_transcript** groups transcript words into phrase clips (reusing
+  viral-clip-engine's grouping: ≤N words, break on sentence punctuation) and adds
+  them to a caption track, timed to where the asset actually plays on the timeline.
+  It creates EDL caption clips; burning them is P3 (Remotion), so Phase-0 render
+  still skips caption tracks with a warning.
+- **reframe** is the basic center reframe: set the target canvas and set the
+  affected clips' `crop.mode="center"`. The Phase-0 render compiler already
+  center-crops to the canvas aspect, so no new render code is needed.
+  `reframe_auto` (face/subject tracking) stays later-phase (needs vision), per A4.
+- **LLM backend is an open decision** (P2.6): the reuse engines support a
+  pluggable backend — manual file hand-off (free, no key, crash-resumable) or
+  OpenRouter (needs a key). This is the owner's call and possibly a credential, so
+  the director layer is not built until they choose. The deterministic smart ops
+  and the propose/accept loop are built first and need no such decision.
+
 ## Environment
 
 - **ffmpeg resolution**: ImageMagick ships an ancient ffmpeg 4.2.3 that shadows the
