@@ -70,7 +70,7 @@ npx playwright test                         # UI smoke (starts both servers itse
 Base `http://127.0.0.1:8787/api/v1` — projects, apply (ops plans with
 optimistic locking), undo/redo, revisions, asset upload + ingest jobs, render
 jobs, `/media/{project}/...` file serving, and `WS /ws` for job/revision
-events. See `CutLab-ClaudeCode-Handoff.md` §A7 for the full surface.
+events. See `docs/HANDOFF.md` §A7 for the full surface.
 
 ## Status
 

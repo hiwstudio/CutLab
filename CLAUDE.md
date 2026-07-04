@@ -31,7 +31,7 @@ pipeline logic, prompts, tuning, and hard-won fixes are the reference implementa
 
 ## Phase discipline
 
-The build spec is `CutLab-ClaudeCode-Handoff.md`. Phase 0 is complete. Do not start
+The build spec is `docs/HANDOFF.md`. Phase 0 is complete. Do not start
 a later phase without the owner asking. Ambiguity resolutions go in `DECISIONS.md`,
 module status in `PROGRESS.md`.
 
