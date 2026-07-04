@@ -64,5 +64,11 @@ See DECISIONS.md "Phase 1" for the resolutions and reuse map (CLAUDE.md).
 - [x] Understanding job — full 6-stage pipeline writes valid artifact + registers in EDL
 - [x] Crash-resume — rewind after silence stage; scenes/silence not re-run
 - [x] API — analyze enqueues job; understanding fetch returns artifact; asset lists path
-- [ ] UI (Playwright) — analyze an asset, open Insights panel  *(running)*
-- [ ] Live check on owner's real footage  *(running — job in progress)*
+- [x] UI (Playwright) — `apps/studio/tests/understanding.spec.ts` (analyze → Insights panel)
+- [x] Live check on owner's real footage — proj_8pl41d6l / ast_0sfvy9db (43s clip):
+      4 scenes, en transcript ("So we got those fun inside Linkington."), 53 beats @86 BPM,
+      22 saliency windows, registered in the EDL as understanding/ast_0sfvy9db.understanding.json
+
+**Phase 1 complete.** Server suite: 146 tests pass (128 fast + 18 slow). Studio:
+smoke + understanding Playwright specs pass. Next phase (P2 AI Director) starts
+only on the owner's request.

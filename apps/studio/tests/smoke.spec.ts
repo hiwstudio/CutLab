@@ -14,7 +14,11 @@ test("editor smoke: ingest, edit, undo, render", async ({ page }) => {
   await page.getByTestId("create-project").click();
   await page.waitForURL(/\/p\/proj_/);
   const projectId = page.url().split("/p/")[1];
-  await expect(page.getByTestId("project-name")).toHaveText("Smoke Test");
+  // First visit to the editor route compiles it lazily (cold Turbopack dev
+  // server); allow for that before the header is asserted.
+  await expect(page.getByTestId("project-name")).toHaveText("Smoke Test", {
+    timeout: 30_000,
+  });
 
   // Upload the synthetic 5s fixture and wait for ingest to finish.
   await page.getByTestId("upload-input").setInputFiles(FIXTURE);
@@ -52,19 +56,19 @@ test("editor smoke: ingest, edit, undo, render", async ({ page }) => {
   await page.mouse.move(hb.x - 40, hb.y + hb.height / 2, { steps: 5 });
   await page.mouse.up();
   await expect(
-    page.locator("[data-testid^=revision-]").filter({ hasText: "trim" }).first(),
+    page.locator("button[data-testid^=revision-]").filter({ hasText: "trim" }).first(),
   ).toBeVisible({ timeout: 15_000 });
-  const revCountAfterTrim = await page.locator("[data-testid^=revision-]").count();
+  const revCountAfterTrim = await page.locator("button[data-testid^=revision-]").count();
 
   // Undo (Ctrl+Z): head moves back, trim revision no longer HEAD.
   await page.keyboard.press("Control+z");
   await expect(
     page
-      .locator("[data-testid^=revision-]")
+      .locator("button[data-testid^=revision-]")
       .filter({ hasText: "split" })
       .filter({ hasText: "HEAD" }),
   ).toBeVisible({ timeout: 15_000 });
-  expect(await page.locator("[data-testid^=revision-]").count()).toBe(
+  expect(await page.locator("button[data-testid^=revision-]").count()).toBe(
     revCountAfterTrim,
   );
 
