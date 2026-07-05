@@ -70,5 +70,35 @@ See DECISIONS.md "Phase 1" for the resolutions and reuse map (CLAUDE.md).
       22 saliency windows, registered in the EDL as understanding/ast_0sfvy9db.understanding.json
 
 **Phase 1 complete.** Server suite: 146 tests pass (128 fast + 18 slow). Studio:
-smoke + understanding Playwright specs pass. Next phase (P2 AI Director) starts
-only on the owner's request.
+smoke + understanding Playwright specs pass.
+
+---
+
+# PROGRESS — Phase 2 (AI Director)
+
+Scope (A11): AI Director v1 (context compiler, plan→propose→accept loop, first
+smart ops: remove_silence, caption_from_transcript, reframe). Built the
+deterministic foundation first (needs no LLM), then the director on top.
+
+- [x] P2.1 OpContext plumbing — engine loads asset understanding artifacts and
+      passes them to op.apply (keeps ops pure) — regression-covered
+- [x] P2.2 remove_silence — pure planner (silence→delete_range) + op — `tests/test_smartops.py`
+- [x] P2.3 caption_from_transcript — phrase grouping + timed caption clips — `tests/test_smartops.py`
+- [x] P2.4 reframe — center-crop via canvas + set_crop; renders 1080×1920 — `tests/test_smartops.py`
+- [x] P2.5 propose→accept/reject loop — engine + API + Studio review panel +
+      smart-op propose triggers — `tests/test_proposals.py`, `apps/studio/tests/proposals.spec.ts`
+- [ ] P2.6 AI Director (LLM) — **blocked on the owner's LLM-backend decision**
+      (manual hand-off / OpenRouter / Anthropic; possibly a credential).
+
+## Phase 2 acceptance so far
+
+- [x] Smart ops golden + engine tests (remove_silence/captions/reframe)
+- [x] reframe renders at true 9:16 (slow test)
+- [x] propose/accept/reject (engine + API)
+- [x] UI: propose a smart edit → review → accept (Playwright)
+- [x] Live on owner's footage: proposed captions from the real transcript on
+      proj_8pl41d6l/ast_0sfvy9db, accepted (2 caption clips), then undone to
+      restore baseline (head r14).
+
+Server suite: 151 fast tests pass (+ slow). The LLM director is the only
+remaining P2 piece and awaits the backend decision.
