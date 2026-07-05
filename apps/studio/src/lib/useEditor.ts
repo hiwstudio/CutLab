@@ -37,6 +37,7 @@ export interface EditorApi extends EditorState {
   proposeOps: (ops: Op[]) => Promise<boolean>;
   acceptProposal: (rev: number) => Promise<void>;
   rejectProposal: (rev: number) => Promise<void>;
+  refresh: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -304,6 +305,7 @@ export function useEditor(projectId: string): EditorApi {
     proposeOps,
     acceptProposal,
     rejectProposal,
+    refresh: () => refreshAll().catch(() => undefined),
     clearError: () => setError(null),
   };
 }

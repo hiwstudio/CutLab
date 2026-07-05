@@ -127,6 +127,11 @@ export interface Understanding {
   } | null;
 }
 
+export type DirectorResult =
+  | { status: "proposed"; rev: number; summary: string; note: string }
+  | { status: "awaiting_answer"; request_id: string; prompt: string }
+  | { status: "rejected"; issues: Issue[]; note: string };
+
 export type Op = { op: string } & Record<string, unknown>;
 
 export interface Issue {

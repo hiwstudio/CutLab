@@ -19,6 +19,16 @@ PROXY_HEIGHT = 540
 RENDER_CHUNK_MS = 60_000
 JOB_MAX_ATTEMPTS = 3
 
+# --- AI Director (P2) ---
+# Backend: "manual" (default; no key, writes the prompt to a file for a human /
+# Claude to answer, resumes) | "openrouter" | "anthropic". The automatic backends
+# read their key from the env; CutLab never stores or logs it.
+LLM_BACKEND = os.environ.get("CUTLAB_LLM_BACKEND", "manual")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+LLM_MODEL = os.environ.get("CUTLAB_LLM_MODEL", "anthropic/claude-sonnet-4.5")
+
 
 def _resolve_ff(tool: str) -> str:
     """Resolve an ffmpeg-family binary.

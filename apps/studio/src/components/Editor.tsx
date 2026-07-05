@@ -6,6 +6,7 @@ import type { AssetRow, Job } from "@/lib/types";
 import { clipEndMs, isMediaClip } from "@/lib/types";
 import { useEditor } from "@/lib/useEditor";
 import type { Understanding } from "@/lib/types";
+import { DirectorPanel } from "./DirectorPanel";
 import { MediaLibrary } from "./MediaLibrary";
 import { Preview } from "./Preview";
 import { ProposalReview } from "./ProposalReview";
@@ -304,16 +305,7 @@ export function Editor({ projectId }: { projectId: string }) {
           />
         </div>
         <div className="flex w-64 shrink-0 flex-col border-l border-zinc-800">
-          <div className="border-b border-zinc-800 p-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              AI Director
-            </h2>
-            <p className="mt-2 rounded border border-dashed border-zinc-800 p-3 text-[11px] leading-relaxed text-zinc-600">
-              Smart edits (remove silence, captions, reframe) propose as revisions
-              you accept or reject — trigger them from an analyzed asset&apos;s
-              Insights. Natural-language commands land once the LLM backend is chosen.
-            </p>
-          </div>
+          <DirectorPanel projectId={projectId} onProposed={ed.refresh} />
           <ProposalReview
             proposals={ed.proposals}
             onAccept={ed.acceptProposal}

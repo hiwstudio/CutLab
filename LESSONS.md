@@ -53,6 +53,25 @@ a scroll and fires `pointercancel`, leaving drag state stuck. Every draggable
 element gets `touch-action: none` and every drag state machine handles
 `pointercancel` (Timeline, Editor asset drag).
 
+## The AI never mutates state directly — it proposes ops the human accepts
+The director turns NL into a plan of ops, applied in `propose` mode only; the
+engine validates it, so a bad LLM plan becomes a reported rejection, never a
+broken EDL, and the human always accepts/rejects (A2.2/A2.3). Keep this invariant
+for every future AI surface: model output → validated ops → proposal, never a
+direct snapshot write or an auto-commit.
+
+## Smart ops that need derived data take it via an injected context, staying pure
+remove_silence/caption_from_transcript read Phase-1 understanding through an
+OpContext the engine populates, not by reading files in apply(). Logic lives in
+pure planner functions (edl+data → primitive-op plan) so it's unit-testable; the
+op just expands into primitives. Reuse this shape for any data-driven op.
+
+## LLM plan parsing must tolerate prose and ```json fences
+Models wrap JSON in explanation or code fences. parse_plan tries bare JSON, then a
+fenced block, then the first {...} span, and validates it's `{"ops":[...]}` with
+op objects — anything else is a clean LLMError, not a crash. Always parse
+defensively; never `json.loads` a raw completion and assume success.
+
 ## Don't round-trip UTF-8 text through PowerShell 5.1 cmdlets
 `Get-Content -Raw | Set-Content -Encoding utf8` on BOM-less UTF-8 misreads it as
 ANSI and double-encodes non-ASCII (em-dashes → mojibake). Use the file tools or

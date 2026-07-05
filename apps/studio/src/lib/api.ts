@@ -2,6 +2,7 @@ import type {
   ApplyResult,
   AssetRow,
   Canvas,
+  DirectorResult,
   EDL,
   Issue,
   Job,
@@ -102,6 +103,18 @@ export const api = {
     request<Understanding>(
       `/api/v1/projects/${id}/assets/${assetId}/understanding`,
     ),
+  directorBackend: (id: string) =>
+    request<{ backend: string }>(`/api/v1/projects/${id}/director/backend`),
+  directorCommand: (id: string, text: string) =>
+    request<DirectorResult>(`/api/v1/projects/${id}/director/command`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  directorAnswer: (id: string, requestId: string, answer: string) =>
+    request<DirectorResult>(`/api/v1/projects/${id}/director/answer`, {
+      method: "POST",
+      body: JSON.stringify({ request_id: requestId, answer }),
+    }),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
 };
 

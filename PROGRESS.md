@@ -87,8 +87,9 @@ deterministic foundation first (needs no LLM), then the director on top.
 - [x] P2.4 reframe — center-crop via canvas + set_crop; renders 1080×1920 — `tests/test_smartops.py`
 - [x] P2.5 propose→accept/reject loop — engine + API + Studio review panel +
       smart-op propose triggers — `tests/test_proposals.py`, `apps/studio/tests/proposals.spec.ts`
-- [ ] P2.6 AI Director (LLM) — **blocked on the owner's LLM-backend decision**
-      (manual hand-off / OpenRouter / Anthropic; possibly a credential).
+- [x] P2.6 AI Director (LLM) — context compiler + pluggable backend (default
+      manual, + openrouter/anthropic) + command→plan→propose loop + Studio command
+      box — `tests/test_director.py`, `apps/studio/tests/director.spec.ts`
 
 ## Phase 2 acceptance so far
 
@@ -100,5 +101,14 @@ deterministic foundation first (needs no LLM), then the director on top.
       proj_8pl41d6l/ast_0sfvy9db, accepted (2 caption clips), then undone to
       restore baseline (head r14).
 
-Server suite: 151 fast tests pass (+ slow). The LLM director is the only
-remaining P2 piece and awaits the backend decision.
+- [x] AI Director: context compiler, plan parsing (bare/fenced/prose JSON),
+      command→propose loop (fake + manual backends), API surface — `tests/test_director.py`
+- [x] UI: NL command → manual prompt → paste plan → proposal → accept (Playwright)
+- [x] Live on owner's footage: "make this vertical for tiktok" → director prompt →
+      reframe plan → proposed → accepted (canvas 1080×1920) → undone to restore.
+
+**Phase 2 complete.** Server suite: 163 fast tests pass (+ slow). Studio: smoke,
+understanding, proposals, director Playwright specs pass. The director proposes;
+the human always accepts/rejects. Automatic backends (openrouter/anthropic) work
+by adding a key to the env; manual is the default and needs none. Next phase (P3:
+L0 compositor + Remotion caption styles) starts only on the owner's request.

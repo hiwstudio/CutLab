@@ -22,6 +22,8 @@ from . import config
 from .db import Database, utcnow
 from .edl.engine import Conflict, Engine, NotFound, Rejected
 from .edl.schema import LEGAL_FPS
+from .director.backends import LLMError
+from .director.director import AwaitingAnswer, Director, PlanRejected, Proposed
 from .jobs.ingest import ingest_handler
 from .jobs.queue import JobQueue
 from .jobs.understanding import understanding_handler
@@ -88,6 +90,15 @@ class AppState:
         self.worker.register("ingest", ingest_handler)
         self.worker.register("render", render_handler)
         self.worker.register("understanding", understanding_handler)
+        # Director backend is chosen from config; fall back to manual if an
+        # automatic backend is configured without its key. Swappable in tests.
+        from .director.backends import ManualBackend, make_backend
+
+        try:
+            backend = make_backend()
+        except LLMError:
+            backend = ManualBackend()
+        self.director = Director(self.engine, self.projects_dir, backend=backend)
         self._start_worker = start_worker
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
@@ -197,6 +208,52 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
     async def reject_proposal(project_id: str, rev: int):
         async with state.locks[project_id]:
             return {"rev": state.engine.reject_proposal(project_id, rev)}
+
+    # -- AI director (P2) ------------------------------------------------------
+
+    def _director_result(result) -> dict:
+        if isinstance(result, Proposed):
+            return {"status": "proposed", "rev": result.rev,
+                    "summary": result.summary, "note": result.note}
+        if isinstance(result, AwaitingAnswer):
+            return {"status": "awaiting_answer", "request_id": result.request_id,
+                    "prompt": result.prompt}
+        if isinstance(result, PlanRejected):
+            return {"status": "rejected", "issues": result.issues, "note": result.note}
+        return {"status": "unknown"}
+
+    @api.get("/projects/{project_id}/director/backend")
+    async def director_backend(project_id: str):
+        state.engine.get_project(project_id)
+        return {"backend": "manual" if getattr(state.director.backend, "manual", False)
+                else type(state.director.backend).__name__.replace("Backend", "").lower()}
+
+    @api.post("/projects/{project_id}/director/command")
+    async def director_command(project_id: str, body: dict):
+        state.engine.get_project(project_id)
+        text = (body or {}).get("text", "")
+        if not isinstance(text, str) or not text.strip():
+            return error_response(422, "E_VALIDATION", "command text is required")
+        async with state.locks[project_id]:
+            try:
+                result = await asyncio.to_thread(state.director.command, project_id, text)
+            except LLMError as e:
+                return error_response(502, "E_LLM", str(e))
+        return _director_result(result)
+
+    @api.post("/projects/{project_id}/director/answer")
+    async def director_answer(project_id: str, body: dict):
+        state.engine.get_project(project_id)
+        rid = (body or {}).get("request_id", "")
+        answer = (body or {}).get("answer", "")
+        if not rid or not isinstance(answer, str) or not answer.strip():
+            return error_response(422, "E_VALIDATION", "request_id and answer are required")
+        async with state.locks[project_id]:
+            try:
+                result = await asyncio.to_thread(state.director.answer, project_id, rid, answer)
+            except LLMError as e:
+                return error_response(422, "E_LLM", str(e))
+        return _director_result(result)
 
     # -- assets ---------------------------------------------------------------
 

@@ -70,11 +70,23 @@ neither needs an LLM), then the LLM director on top.
   affected clips' `crop.mode="center"`. The Phase-0 render compiler already
   center-crops to the canvas aspect, so no new render code is needed.
   `reframe_auto` (face/subject tracking) stays later-phase (needs vision), per A4.
-- **LLM backend is an open decision** (P2.6): the reuse engines support a
-  pluggable backend — manual file hand-off (free, no key, crash-resumable) or
-  OpenRouter (needs a key). This is the owner's call and possibly a credential, so
-  the director layer is not built until they choose. The deterministic smart ops
-  and the propose/accept loop are built first and need no such decision.
+- **LLM backend: pluggable, default manual** (owner's decision, 2026-07-04). Like
+  recap-engine: `CUTLAB_LLM_BACKEND` selects `manual` (default — writes the prompt
+  to `director/{rid}.prompt.txt`, a human/Claude drops the answer back, it resumes;
+  free, no key, crash-resumable via the files), `openrouter`, or `anthropic`. Keys
+  come from the env (`OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY`) and are never
+  stored or logged. Auto backends fall back to manual if their key is absent.
+- **The director never commits — it only proposes** (A2.3). Every plan, whichever
+  backend produced it, is applied in `propose` mode; the human accepts/rejects.
+  The system prompt constrains the model to a safe op subset (the smart ops +
+  primitive edits); the engine validates the plan, so a bad plan becomes a
+  reported rejection, never a broken EDL.
+- **Director v1 is request/response, not a durable job.** A2.4 ("heavy work is a
+  durable job") targets minutes-long media work; an LLM call is seconds and its
+  result is already a persisted proposal revision. Automatic calls are offloaded
+  to a thread (`asyncio.to_thread`) so they don't block the event loop; manual
+  request state lives in files (resumable). Moving the director onto the job queue
+  is a later option if calls get heavier (e.g. multi-step planning).
 
 ## Environment
 
