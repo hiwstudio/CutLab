@@ -69,6 +69,16 @@ export const api = {
     request<{ rev: number }>(`/api/v1/projects/${id}/redo`, { method: "POST" }),
   revisions: (id: string) =>
     request<RevisionRow[]>(`/api/v1/projects/${id}/revisions`),
+  proposals: (id: string) =>
+    request<RevisionRow[]>(`/api/v1/projects/${id}/proposals`),
+  acceptProposal: (id: string, rev: number) =>
+    request<{ rev: number }>(`/api/v1/projects/${id}/proposals/${rev}/accept`, {
+      method: "POST",
+    }),
+  rejectProposal: (id: string, rev: number) =>
+    request<{ rev: number }>(`/api/v1/projects/${id}/proposals/${rev}/reject`, {
+      method: "POST",
+    }),
   listAssets: (id: string) => request<AssetRow[]>(`/api/v1/projects/${id}/assets`),
   uploadAsset: async (id: string, file: File) => {
     const form = new FormData();

@@ -8,6 +8,7 @@ import { useEditor } from "@/lib/useEditor";
 import type { Understanding } from "@/lib/types";
 import { MediaLibrary } from "./MediaLibrary";
 import { Preview } from "./Preview";
+import { ProposalReview } from "./ProposalReview";
 import { RevisionStrip } from "./RevisionStrip";
 import { Timeline } from "./Timeline";
 import { UnderstandingPanel } from "./UnderstandingPanel";
@@ -22,7 +23,9 @@ export function Editor({ projectId }: { projectId: string }) {
   const ed = useEditor(projectId);
   const [assetDrag, setAssetDrag] = useState<AssetDrag | null>(null);
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
-  const [insights, setInsights] = useState<{ name: string; u: Understanding } | null>(null);
+  const [insights, setInsights] = useState<
+    { name: string; assetId: string; u: Understanding } | null
+  >(null);
   const assetDragRef = useRef<AssetDrag | null>(null);
 
   const readOnly = ed.viewRev !== null;
@@ -182,8 +185,18 @@ export function Editor({ projectId }: { projectId: string }) {
   const onViewUnderstanding = async (asset: AssetRow) => {
     const u = await ed.loadUnderstanding(asset.asset_id);
     if (u) {
-      setInsights({ name: asset.src.split("/").pop() ?? asset.asset_id, u });
+      setInsights({
+        name: asset.src.split("/").pop() ?? asset.asset_id,
+        assetId: asset.asset_id,
+        u,
+      });
     }
+  };
+
+  // Trigger a smart edit as a proposal the user then accepts/rejects.
+  const proposeSmartEdit = async (op: Record<string, unknown>) => {
+    const ok = await ed.proposeOps([op as never]);
+    if (ok) setInsights(null); // proposal now shows in the review panel
   };
 
   return (
@@ -296,10 +309,16 @@ export function Editor({ projectId }: { projectId: string }) {
               AI Director
             </h2>
             <p className="mt-2 rounded border border-dashed border-zinc-800 p-3 text-[11px] leading-relaxed text-zinc-600">
-              Natural-language editing arrives in Phase 2. The director will
-              propose plans as revisions you accept or reject.
+              Smart edits (remove silence, captions, reframe) propose as revisions
+              you accept or reject — trigger them from an analyzed asset&apos;s
+              Insights. Natural-language commands land once the LLM backend is chosen.
             </p>
           </div>
+          <ProposalReview
+            proposals={ed.proposals}
+            onAccept={ed.acceptProposal}
+            onReject={ed.rejectProposal}
+          />
           <RevisionStrip
             revisions={ed.revisions}
             headRev={ed.headRev}
@@ -330,6 +349,10 @@ export function Editor({ projectId }: { projectId: string }) {
           name={insights.name}
           understanding={insights.u}
           onClose={() => setInsights(null)}
+          captionTrackId={
+            ed.edl?.tracks.find((t) => t.kind === "caption" || t.kind === "text")?.id ?? null
+          }
+          onPropose={proposeSmartEdit}
         />
       )}
 

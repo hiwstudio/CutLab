@@ -181,6 +181,69 @@ class Engine:
             "warnings": [w.to_dict() for w in result.warnings],
         }
 
+    # -- proposals (P2: plan -> propose -> accept/reject) ---------------------
+
+    def proposals(self, project_id: str) -> list[dict[str, Any]]:
+        self.get_project(project_id)
+        return self.db.query(
+            "SELECT rev, parent_rev, summary, created_at FROM revisions"
+            " WHERE project_id=? AND state='proposed' ORDER BY rev",
+            (project_id,),
+        )
+
+    def accept_proposal(self, project_id: str, rev: int) -> int:
+        """Commit a proposed revision as the new head. Clean only if the
+        proposal was made against the current head; otherwise it is stale and
+        the caller must re-propose against the new head."""
+        project = self.get_project(project_id)
+        head = project["head_rev"]
+        row = self.db.query_one(
+            "SELECT parent_rev, state FROM revisions WHERE project_id=? AND rev=?",
+            (project_id, rev),
+        )
+        if row is None:
+            raise NotFound(f"revision {rev} not found for {project_id}")
+        if row["state"] != "proposed":
+            raise Rejected([Issue("E_STATE", "rev", f"revision {rev} is not a proposal")])
+        if row["parent_rev"] != head:
+            raise Conflict(head_rev=head, base_rev=row["parent_rev"] or -1)
+        now = utcnow()
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE revisions SET state='committed' WHERE project_id=? AND rev=?",
+                (project_id, rev),
+            )
+            edl = EDL.model_validate(json.loads(
+                conn.execute("SELECT edl_json FROM revisions WHERE project_id=? AND rev=?",
+                             (project_id, rev)).fetchone()["edl_json"]
+            ))
+            conn.execute(
+                "UPDATE projects SET head_rev=?, name=?, updated_at=? WHERE id=?",
+                (rev, edl.project.name, now, project_id),
+            )
+        self._write_edl_file(project_id, edl)
+        if self.on_revision:
+            self.on_revision(project_id, rev, f"accept proposal r{rev}", "committed")
+        return rev
+
+    def reject_proposal(self, project_id: str, rev: int) -> int:
+        self.get_project(project_id)
+        row = self.db.query_one(
+            "SELECT state FROM revisions WHERE project_id=? AND rev=?",
+            (project_id, rev),
+        )
+        if row is None:
+            raise NotFound(f"revision {rev} not found for {project_id}")
+        if row["state"] != "proposed":
+            raise Rejected([Issue("E_STATE", "rev", f"revision {rev} is not a proposal")])
+        self.db.execute(
+            "UPDATE revisions SET state='rejected' WHERE project_id=? AND rev=?",
+            (project_id, rev),
+        )
+        if self.on_revision:
+            self.on_revision(project_id, rev, f"reject proposal r{rev}", "rejected")
+        return rev
+
     # -- undo / redo ----------------------------------------------------------
 
     def undo(self, project_id: str) -> int:

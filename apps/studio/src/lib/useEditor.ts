@@ -11,6 +11,7 @@ export interface EditorState {
   viewRev: number | null; // non-null = read-only view of an old revision
   assets: AssetRow[];
   revisions: RevisionRow[];
+  proposals: RevisionRow[];
   jobs: Record<string, Job>;
   selection: string | null; // clip id
   playheadMs: number;
@@ -33,6 +34,9 @@ export interface EditorApi extends EditorState {
   startRender: () => Promise<string | null>;
   analyze: (assetId: string) => Promise<string | null>;
   loadUnderstanding: (assetId: string) => Promise<Understanding | null>;
+  proposeOps: (ops: Op[]) => Promise<boolean>;
+  acceptProposal: (rev: number) => Promise<void>;
+  rejectProposal: (rev: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -42,6 +46,7 @@ export function useEditor(projectId: string): EditorApi {
   const [viewRev, setViewRev] = useState<number | null>(null);
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [revisions, setRevisions] = useState<RevisionRow[]>([]);
+  const [proposals, setProposals] = useState<RevisionRow[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [selection, setSelection] = useState<string | null>(null);
   const [playheadMs, setPlayheadMs] = useState(0);
@@ -57,16 +62,18 @@ export function useEditor(projectId: string): EditorApi {
     e instanceof TypeError || (e instanceof Error && /fetch/i.test(e.message));
 
   const refreshAll = useCallback(async () => {
-    const [project, freshEdl, freshAssets, revs] = await Promise.all([
+    const [project, freshEdl, freshAssets, revs, props] = await Promise.all([
       api.getProject(projectId),
       api.getEdl(projectId),
       api.listAssets(projectId),
       api.revisions(projectId),
+      api.proposals(projectId),
     ]);
     setHeadRev(project.head_rev);
     setEdl(freshEdl);
     setAssets(freshAssets);
     setRevisions(revs);
+    setProposals(props);
     setServerDown(false);
   }, [projectId]);
 
@@ -95,7 +102,10 @@ export function useEditor(projectId: string): EditorApi {
           refreshAll().catch(() => undefined);
         }
       } else if (event.type === "revision") {
-        if (event.state === "committed" && event.rev !== headRevRef.current) {
+        // A new proposal, an accept/reject, or an external commit — refresh.
+        if (event.state === "proposed" || event.state === "rejected") {
+          refreshAll().catch(() => undefined);
+        } else if (event.state === "committed" && event.rev !== headRevRef.current) {
           refreshAll().catch(() => undefined);
         }
       }
@@ -218,6 +228,52 @@ export function useEditor(projectId: string): EditorApi {
     [projectId],
   );
 
+  const proposeOps = useCallback(
+    async (ops: Op[]): Promise<boolean> => {
+      try {
+        await api.apply(projectId, headRevRef.current, ops, "propose");
+        await refreshAll();
+        return true;
+      } catch (e) {
+        if (isNetworkError(e)) setServerDown(true);
+        else if (e instanceof ApiError) {
+          setError(e.issues.length ? `${e.issues[0].code}: ${e.issues[0].message}` : e.message);
+        } else setError(String(e));
+        return false;
+      }
+    },
+    [projectId, refreshAll],
+  );
+
+  const acceptProposal = useCallback(
+    async (rev: number) => {
+      try {
+        await api.acceptProposal(projectId, rev);
+        await refreshAll();
+      } catch (e) {
+        if (isNetworkError(e)) setServerDown(true);
+        else if (e instanceof ApiError && e.status === 409) {
+          setError("Proposal is stale (the timeline changed) — reload and re-propose.");
+          await refreshAll().catch(() => undefined);
+        } else setError(e instanceof ApiError ? e.message : String(e));
+      }
+    },
+    [projectId, refreshAll],
+  );
+
+  const rejectProposal = useCallback(
+    async (rev: number) => {
+      try {
+        await api.rejectProposal(projectId, rev);
+        await refreshAll();
+      } catch (e) {
+        if (isNetworkError(e)) setServerDown(true);
+        else setError(e instanceof ApiError ? e.message : String(e));
+      }
+    },
+    [projectId, refreshAll],
+  );
+
   return {
     projectId,
     edl,
@@ -225,6 +281,7 @@ export function useEditor(projectId: string): EditorApi {
     viewRev,
     assets,
     revisions,
+    proposals,
     jobs,
     selection,
     playheadMs,
@@ -244,6 +301,9 @@ export function useEditor(projectId: string): EditorApi {
     startRender,
     analyze,
     loadUnderstanding,
+    proposeOps,
+    acceptProposal,
+    rejectProposal,
     clearError: () => setError(null),
   };
 }

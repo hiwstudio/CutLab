@@ -14,12 +14,18 @@ export function UnderstandingPanel({
   name,
   understanding,
   onClose,
+  captionTrackId,
+  onPropose,
 }: {
   name: string;
   understanding: Understanding;
   onClose: () => void;
+  captionTrackId: string | null;
+  onPropose: (op: Record<string, unknown>) => void;
 }) {
   const u = understanding;
+  const hasSilence = u.silence.length > 0;
+  const hasSpeech = (u.transcript?.segments.length ?? 0) > 0;
   const words = u.transcript?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
   const peak =
     u.saliency && u.saliency.windows.length
@@ -89,6 +95,57 @@ export function UnderstandingPanel({
             this in a later phase.
           </div>
         )}
+
+        <div className="mt-3" data-testid="propose-smart-edits">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+            Propose a smart edit
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              data-testid="propose-remove-silence"
+              disabled={!hasSilence}
+              className="rounded bg-indigo-800 px-2 py-1 text-[11px] text-indigo-100 enabled:hover:bg-indigo-700 disabled:opacity-40"
+              onClick={() =>
+                onPropose({ op: "remove_silence", asset: u.asset_id })
+              }
+              title={hasSilence ? "" : "No silence detected"}
+            >
+              Remove silence
+            </button>
+            <button
+              data-testid="propose-captions"
+              disabled={!hasSpeech || !captionTrackId}
+              className="rounded bg-indigo-800 px-2 py-1 text-[11px] text-indigo-100 enabled:hover:bg-indigo-700 disabled:opacity-40"
+              onClick={() =>
+                captionTrackId &&
+                onPropose({
+                  op: "caption_from_transcript",
+                  asset: u.asset_id,
+                  track: captionTrackId,
+                })
+              }
+              title={
+                !hasSpeech
+                  ? "No speech detected"
+                  : !captionTrackId
+                    ? "No caption track"
+                    : ""
+              }
+            >
+              Captions from transcript
+            </button>
+            <button
+              data-testid="propose-reframe"
+              className="rounded bg-indigo-800 px-2 py-1 text-[11px] text-indigo-100 hover:bg-indigo-700"
+              onClick={() => onPropose({ op: "reframe", width: 1080, height: 1920 })}
+            >
+              Reframe 9:16
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-zinc-600">
+            Each proposes a revision you review and accept in the AI Director panel.
+          </p>
+        </div>
 
         {preview && (
           <div className="mt-3">

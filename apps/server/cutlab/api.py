@@ -182,6 +182,22 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
     async def revisions(project_id: str):
         return state.engine.revisions(project_id)
 
+    # -- proposals (P2) --------------------------------------------------------
+
+    @api.get("/projects/{project_id}/proposals")
+    async def proposals(project_id: str):
+        return state.engine.proposals(project_id)
+
+    @api.post("/projects/{project_id}/proposals/{rev}/accept")
+    async def accept_proposal(project_id: str, rev: int):
+        async with state.locks[project_id]:
+            return {"rev": state.engine.accept_proposal(project_id, rev)}
+
+    @api.post("/projects/{project_id}/proposals/{rev}/reject")
+    async def reject_proposal(project_id: str, rev: int):
+        async with state.locks[project_id]:
+            return {"rev": state.engine.reject_proposal(project_id, rev)}
+
     # -- assets ---------------------------------------------------------------
 
     @api.post("/projects/{project_id}/assets")
