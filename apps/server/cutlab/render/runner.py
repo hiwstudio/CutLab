@@ -18,7 +18,7 @@ from ..edl.schema import EDL
 from ..util.ffrun import run_ffmpeg
 from ..util.paths import renders_dir
 from .ffgraph import chunk_path, compile_all, compile_chunk, compile_mux, concat_list_content
-from .planner import Plan, build_plan
+from .planner import Plan, build_plan, window_plan
 
 log = logging.getLogger("cutlab.render")
 
@@ -37,6 +37,10 @@ def render_handler(ctx) -> None:
 
     asset_audio = _resolve_asset_audio(ctx.queue.db, edl, project_id, project_dir)
     plan = build_plan(edl, asset_audio)
+    # L1 segment preview: window the plan and use the fast encode path.
+    range_ms = inp.get("range_ms")
+    if range_ms:
+        plan = window_plan(plan, int(range_ms[0]), int(range_ms[1]), quality="preview")
 
     out_dir = renders_dir(project_dir)
     work_dir = out_dir / f"{output_name}.work"

@@ -138,8 +138,12 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
         *inputs,
         "-filter_complex", ";".join(filters),
         "-map", f"[{current}]", "-map", "[aout]",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        # preview (L1 segment) trades quality for turnaround; final is archival.
+        *(["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]
+          if plan.quality == "preview"
+          else ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]),
+        "-c:a", "aac", "-b:a", "128k" if plan.quality == "preview" else "192k",
+        "-ar", "48000",
         "-r", fps,
         "-t", dur_s,
         str(chunk_path(work_dir, index)),

@@ -367,6 +367,26 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
         }, project_id=project_id)
         return {"job_id": job_id, "rev": rev}
 
+    @api.post("/projects/{project_id}/preview")
+    async def preview_segment(project_id: str, body: dict):
+        """L1 segment preview: fast windowed render of [from_ms, to_ms)."""
+        project = state.engine.get_project(project_id)
+        rev = body.get("rev", project["head_rev"])
+        state.engine.get_edl(project_id, rev)  # 404 if rev unknown
+        try:
+            from_ms, to_ms = int(body["from_ms"]), int(body["to_ms"])
+        except (KeyError, TypeError, ValueError):
+            return error_response(422, "E_VALIDATION", "from_ms and to_ms (int) required")
+        if not (0 <= from_ms < to_ms):
+            return error_response(422, "E_VALIDATION", "need 0 <= from_ms < to_ms")
+        output = f"preview_r{rev}_{from_ms}_{to_ms}"
+        job_id = state.queue.enqueue("render", {
+            "project_id": project_id, "rev": rev,
+            "project_dir": str(state.projects_dir / project_id),
+            "output": output, "range_ms": [from_ms, to_ms],
+        }, project_id=project_id)
+        return {"job_id": job_id, "rev": rev, "output": f"renders/{output}.mp4"}
+
     @api.get("/jobs/{job_id}")
     async def get_job(job_id: str):
         job = state.queue.get(job_id)

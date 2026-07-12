@@ -51,6 +51,7 @@ class Plan:
     video_tracks: list[list[VideoPiece]] = field(default_factory=list)  # bottom-up
     audio: list[AudioPiece] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    quality: str = "final"  # final | preview (L1 segment renders: fast encode)
 
     @property
     def chunks(self) -> list[tuple[int, int]]:
@@ -129,3 +130,48 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
     for w in plan.warnings:
         log.warning("%s", w)
     return plan
+
+
+def window_plan(plan: Plan, from_ms: int, to_ms: int, quality: str = "preview") -> Plan:
+    """Pure: restrict a plan to the timeline window [from_ms, to_ms), re-based
+    to 0. Used for L1 segment previews. Source ranges are re-derived from the
+    visible timeline span (respecting speed) so a windowed piece plays exactly
+    what the full render would play in that window."""
+    from_ms = max(0, from_ms)
+    to_ms = min(plan.duration_ms, to_ms)
+    if to_ms <= from_ms:
+        raise ValueError("empty preview window")
+
+    out = Plan(width=plan.width, height=plan.height, fps=plan.fps,
+               duration_ms=to_ms - from_ms, warnings=list(plan.warnings),
+               quality=quality)
+
+    for pieces in plan.video_tracks:
+        windowed: list[VideoPiece] = []
+        for p in pieces:
+            vis0, vis1 = max(p.start_ms, from_ms), min(p.end_ms, to_ms)
+            if vis0 >= vis1:
+                continue
+            q = VideoPiece(**{**p.__dict__})
+            if p.is_image:
+                q.in_ms, q.out_ms = 0, vis1 - vis0
+            else:
+                q.in_ms = p.in_ms + round((vis0 - p.start_ms) * p.speed)
+                q.out_ms = p.in_ms + round((vis1 - p.start_ms) * p.speed)
+            q.start_ms, q.end_ms = vis0 - from_ms, vis1 - from_ms
+            windowed.append(q)
+        out.video_tracks.append(windowed)
+
+    for a in plan.audio:
+        vis0, vis1 = max(a.start_ms, from_ms), min(a.end_ms, to_ms)
+        if vis0 >= vis1:
+            continue
+        out.audio.append(AudioPiece(
+            src=a.src,
+            in_ms=a.in_ms + round((vis0 - a.start_ms) * a.speed),
+            out_ms=a.in_ms + round((vis1 - a.start_ms) * a.speed),
+            speed=a.speed,
+            start_ms=vis0 - from_ms, end_ms=vis1 - from_ms,
+            gain_db=a.gain_db,
+        ))
+    return out
