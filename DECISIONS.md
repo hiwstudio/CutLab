@@ -42,6 +42,26 @@ build spec. Resolutions:
   are the only mutation path). It is a Phase-1 op, not one of A5's later-phase enum
   entries.
 
+## Phase 3 — Preview ladder + captions
+
+- **Caption rendering is ffmpeg/libass ASS burn-in, not Remotion (for now).**
+  A11 says "first Remotion caption styles", but the owner's viral-clip-engine
+  already renders captions via generated ASS + libass in production — proven,
+  deterministic, CPU-cheap, zero new toolchain in the render job. The four named
+  styles (default/bold-pop/boxed/top-title) live in `render/captions.py` and are
+  exactly what the P6 capability registry exposes as `caption_style` capabilities;
+  a Remotion handler can be added later as an alternative style backend without
+  touching the pipeline (overlay-pass hook stays: captions are already compiled
+  per chunk as a separate final video step). Flagged to the owner in the phase
+  report.
+- **L0 transport clock**: interval-based master clock corrected by the topmost
+  video layer's media clock (rAF freezes in hidden tabs; the media element is
+  authoritative so A/V can't drift). L0 is approximate by design; L1 (`/preview`,
+  windowed fast-encode render) and L2 (full render) are exact.
+- **ASS sidecars are referenced by bare filename** and ffmpeg runs with
+  `cwd=work_dir` — sidesteps Windows drive-colon escaping in filtergraphs
+  entirely (same trick viral-clip-engine uses).
+
 ## Phase 2 — AI Director (in progress)
 
 A11 scopes P2 as: AI Director v1 (context compiler, plan→propose→accept loop,

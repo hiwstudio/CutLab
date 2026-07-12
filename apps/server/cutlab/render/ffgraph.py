@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import audio as audio_filters
+from .captions import build_ass
 from .planner import AudioPiece, Plan, VideoPiece
 
 
@@ -27,6 +28,21 @@ def _even(v: float) -> int:
 
 def chunk_path(work_dir: Path, index: int) -> Path:
     return work_dir / f"chunk_{index:04d}.mp4"
+
+
+def chunk_ass_name(index: int) -> str:
+    return f"chunk_{index:04d}.ass"
+
+
+def chunk_ass(plan: Plan, index: int) -> str | None:
+    """ASS subtitle document for the captions visible in this chunk (or None).
+    The runner writes it next to the chunk and ffmpeg runs with cwd=work_dir so
+    the filtergraph can reference it by bare name (no Windows path escaping)."""
+    t0, t1 = plan.chunks[index]
+    return build_ass(
+        [(c.start_ms, c.end_ms, c.text, c.style) for c in plan.captions],
+        plan.width, plan.height, window=(t0, t1),
+    )
 
 
 def _crop_geometry(piece: VideoPiece, canvas_w: int, canvas_h: int) -> tuple[str | None, int, int]:
@@ -117,6 +133,12 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
             current = out_label
             n_label += 1
             n_inputs += 1
+
+    # Captions: burn the chunk's ASS (written by the runner) as the last video
+    # step. Referenced by bare name; the runner executes with cwd=work_dir.
+    if chunk_ass(plan, index) is not None:
+        filters.append(f"[{current}]ass={chunk_ass_name(index)}[vcap]")
+        current = "vcap"
 
     audio_labels: list[str] = []
     for piece in plan.audio:

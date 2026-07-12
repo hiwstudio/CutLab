@@ -15,13 +15,15 @@ class FFmpegError(Exception):
         self.stderr_tail = stderr_tail
 
 
-def run_ffmpeg(args: list[str], timeout: int | None = None) -> None:
+def run_ffmpeg(args: list[str], timeout: int | None = None, cwd: str | None = None) -> None:
     """Run ffmpeg with the given args (binary prepended). Raises FFmpegError
-    with the stderr tail on failure."""
+    with the stderr tail on failure. `cwd` lets filters reference sidecar files
+    (e.g. ass=chunk_0.ass) by bare name, avoiding Windows path-escaping in
+    filtergraphs."""
     from .. import config
 
     cmd = [config.FFMPEG, "-hide_banner", "-y", *args]
     log.info("ffmpeg: %s", subprocess.list2cmdline(cmd))
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
     if proc.returncode != 0:
         raise FFmpegError(cmd, proc.returncode, (proc.stderr or "")[-2000:])

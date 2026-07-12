@@ -75,7 +75,8 @@ def test_compiler_deterministic(tmp_path: Path):
     assert "concat" in " ".join(a["mux"])
 
 
-def test_caption_tracks_skipped_with_warning():
+def test_caption_tracks_planned():
+    """P3.4: caption clips become CaptionPieces in the plan (burned via ASS)."""
     edl = _plan_edl(5_000)
     edl.tracks.append(EDL.model_validate({
         "edl_version": "1.0",
@@ -83,12 +84,20 @@ def test_caption_tracks_skipped_with_warning():
                     "canvas": {"width": 320, "height": 180, "fps": 30}},
         "assets": {},
         "tracks": [{"id": "trk_cx", "kind": "caption", "clips": [
-            {"id": "clp_cx", "start_ms": 0, "end_ms": 1000, "text": "skip me"},
+            {"id": "clp_cx", "start_ms": 0, "end_ms": 1000, "text": "burn me",
+             "cap_style": "bold-pop"},
         ]}],
     }).tracks[0])
     plan = build_plan(edl, {"ast_v1": True})
-    assert any("caption" in w for w in plan.warnings)
     assert len(plan.video_tracks) == 1
+    assert len(plan.captions) == 1
+    cap = plan.captions[0]
+    assert (cap.start_ms, cap.end_ms, cap.text, cap.style) == (0, 1000, "burn me", "bold-pop")
+    # And the chunk compiler emits an ass filter for it.
+    from cutlab.render.ffgraph import compile_chunk
+
+    args = compile_chunk(plan, 0, Path("."), Path("w"))
+    assert any("ass=chunk_0000.ass" in a for a in args)
 
 
 # -- end-to-end render helpers ------------------------------------------------

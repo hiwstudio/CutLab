@@ -97,6 +97,20 @@ def make_tone_silence_tone(path: Path, seg_seconds: float = 2.0,
     return path
 
 
+def make_black_video(path: Path, seconds: float, size: str = "320x180",
+                     fps: int = 30) -> Path:
+    """Pure black + silent audio — the canvas for caption-burn luminance tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    run_ffmpeg([
+        "-f", "lavfi", "-i", f"color=c=black:size={size}:rate={fps}:duration={seconds}",
+        "-f", "lavfi", "-i", f"anullsrc=r=48000:cl=mono",
+        "-t", str(seconds),
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+        "-c:a", "aac", "-b:a", "96k", str(path),
+    ])
+    return path
+
+
 def make_click_track(path: Path, bpm: int = 120, seconds: float = 8.0) -> Path:
     """A metronome click at a fixed BPM — deterministic input for beat tracking.
     Clicks are short sine bursts at `bpm` beats/min."""

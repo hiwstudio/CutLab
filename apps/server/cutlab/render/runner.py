@@ -17,7 +17,15 @@ from ..edl.engine import Engine
 from ..edl.schema import EDL
 from ..util.ffrun import run_ffmpeg
 from ..util.paths import renders_dir
-from .ffgraph import chunk_path, compile_all, compile_chunk, compile_mux, concat_list_content
+from .ffgraph import (
+    chunk_ass,
+    chunk_ass_name,
+    chunk_path,
+    compile_all,
+    compile_chunk,
+    compile_mux,
+    concat_list_content,
+)
 from .planner import Plan, build_plan, window_plan
 
 log = logging.getLogger("cutlab.render")
@@ -66,7 +74,10 @@ def render_handler(ctx) -> None:
         args = compile_chunk(plan, i, project_dir, work_dir)
 
         def do_chunk(args=args, i=i) -> dict:
-            run_ffmpeg(args)
+            ass = chunk_ass(plan, i)
+            if ass is not None:
+                (work_dir / chunk_ass_name(i)).write_text(ass, encoding="utf-8")
+            run_ffmpeg(args, cwd=str(work_dir))
             return {"file": str(chunk_path(work_dir, i)), "_cmd": _cmdline(args)}
 
         ctx.run_stage(f"chunk_{i}", do_chunk)

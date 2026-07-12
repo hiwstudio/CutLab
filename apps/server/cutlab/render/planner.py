@@ -43,6 +43,14 @@ class AudioPiece:
 
 
 @dataclass
+class CaptionPiece:
+    start_ms: int
+    end_ms: int
+    text: str
+    style: str | None = None  # caption-style capability id; None = default
+
+
+@dataclass
 class Plan:
     width: int
     height: int
@@ -50,6 +58,7 @@ class Plan:
     duration_ms: int
     video_tracks: list[list[VideoPiece]] = field(default_factory=list)  # bottom-up
     audio: list[AudioPiece] = field(default_factory=list)
+    captions: list[CaptionPiece] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     quality: str = "final"  # final | preview (L1 segment renders: fast encode)
 
@@ -79,11 +88,12 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
 
     for track in edl.tracks:
         if track.kind in ("caption", "text"):
-            if track.clips:
-                plan.warnings.append(
-                    f"caption/text track {track.id} skipped ({len(track.clips)} clips) — "
-                    "Remotion overlay pass is a later phase"
-                )
+            for clip in track.clips:
+                assert isinstance(clip, CaptionClip)
+                plan.captions.append(CaptionPiece(
+                    start_ms=clip.start_ms, end_ms=clip.end_ms,
+                    text=clip.text, style=clip.cap_style,
+                ))
             continue
 
         pieces: list[VideoPiece] = []
@@ -173,5 +183,14 @@ def window_plan(plan: Plan, from_ms: int, to_ms: int, quality: str = "preview") 
             speed=a.speed,
             start_ms=vis0 - from_ms, end_ms=vis1 - from_ms,
             gain_db=a.gain_db,
+        ))
+
+    for c in plan.captions:
+        vis0, vis1 = max(c.start_ms, from_ms), min(c.end_ms, to_ms)
+        if vis0 >= vis1:
+            continue
+        out.captions.append(CaptionPiece(
+            start_ms=vis0 - from_ms, end_ms=vis1 - from_ms,
+            text=c.text, style=c.style,
         ))
     return out
