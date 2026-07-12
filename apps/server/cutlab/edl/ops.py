@@ -649,11 +649,42 @@ class Reframe(_OpBase):
         return f"reframe to {self.width}x{self.height} (center-crop {count} clip(s))"
 
 
+class AddEmphasis(_OpBase):
+    """P3: punch-in emphasis — split out [at, at+duration) and scale it up.
+    at_ms omitted -> the saliency peak inside the clip (needs understanding)."""
+
+    op: Literal["add_emphasis"]
+    clip: str
+    at_ms: int | None = Field(default=None, ge=0)
+    duration_ms: int = Field(default=1000, ge=50, le=30_000)
+    scale: float = Field(default=1.15, gt=1.0, le=3.0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from .smartops import plan_add_emphasis
+
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video":
+            raise OpError("E_KIND", "clip", "add_emphasis targets video clips")
+        u = None
+        if self.at_ms is None:
+            if ctx is None:
+                raise OpError("E_NO_UNDERSTANDING", "clip", "no op context available")
+            u = ctx.require_understanding(clip.asset)
+        plan = plan_add_emphasis(
+            edl, clip, u, self.at_ms, self.duration_ms, self.scale,
+            new_ids=(ids.new_clip_id(), ids.new_clip_id()),
+        )
+        if not plan:
+            raise OpError("E_RANGE", "at_ms", "no emphasis point found in clip")
+        _apply_primitive_ops(edl, plan, ctx)
+        return f"emphasize {self.clip} ({self.scale}x for {self.duration_ms}ms)"
+
+
 # -- later-phase ops: enum defined now, E_NOT_IMPLEMENTED on apply ------------
 
 LATER_PHASE_OPS = (
     "duck", "denoise", "fade", "apply_effect", "add_transition",
-    "find", "compact", "add_emphasis", "apply_style", "reorder",
+    "find", "compact", "apply_style", "reorder",
 )
 
 
@@ -670,7 +701,7 @@ Op = Annotated[
         AddTrack, RemoveTrack, AddClip, RemoveClip, Trim, Split, Move,
         DeleteRange, SetSpeed, SetGain, SetTransform, SetCrop, SetCanvas,
         AddCaption, SetProject, AddAsset, SetUnderstanding,
-        RemoveSilence, CaptionFromTranscript, Reframe, LaterPhaseOp,
+        RemoveSilence, CaptionFromTranscript, Reframe, AddEmphasis, LaterPhaseOp,
     ],
     Field(discriminator="op"),
 ]

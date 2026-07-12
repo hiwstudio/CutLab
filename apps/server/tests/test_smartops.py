@@ -307,6 +307,60 @@ def test_reframe_renders_at_target_aspect(tmp_path: Path):
     db.close()
 
 
+# -- add_emphasis ---------------------------------------------------------
+
+
+def test_add_emphasis_explicit_point(engine: Engine):
+    pid = _project_with_analyzed_asset(engine, understanding_with(silence=[]))
+    head = engine.get_project(pid)["head_rev"]
+    r = engine.apply(pid, head, [
+        {"op": "add_emphasis", "clip": "clp_a1", "at_ms": 3000, "duration_ms": 2000, "scale": 1.5},
+    ])
+    clips = clips_on(r["edl"], "trk_v1")
+    # Split into 3 pieces; middle one scaled, timeline unchanged.
+    assert len(clips) == 3
+    assert [c["start_ms"] for c in clips] == [0, 3000, 5000]
+    assert clips[1]["transform"]["scale"] == 1.5
+    assert clips[0].get("transform") is None
+    assert r["edl"]["project"]["duration_ms"] == 10000
+
+
+def test_add_emphasis_at_clip_start_splits_once(engine: Engine):
+    pid = _project_with_analyzed_asset(engine, understanding_with(silence=[]))
+    head = engine.get_project(pid)["head_rev"]
+    r = engine.apply(pid, head, [
+        {"op": "add_emphasis", "clip": "clp_a1", "at_ms": 0, "duration_ms": 1000},
+    ])
+    clips = clips_on(r["edl"], "trk_v1")
+    assert len(clips) == 2
+    assert clips[0]["transform"]["scale"] == 1.15  # default scale on the head piece
+
+
+def test_add_emphasis_uses_saliency_peak(engine: Engine):
+    from cutlab.understanding.schema import Saliency, SaliencyWindow
+
+    u = understanding_with(silence=[])
+    u.saliency = Saliency(profile="default", window_ms=2000, windows=[
+        SaliencyWindow(start_ms=0, end_ms=2000, score=0.2),
+        SaliencyWindow(start_ms=6000, end_ms=8000, score=0.9),  # the peak
+    ])
+    pid = _project_with_analyzed_asset(engine, u)
+    head = engine.get_project(pid)["head_rev"]
+    r = engine.apply(pid, head, [{"op": "add_emphasis", "clip": "clp_a1"}])
+    clips = clips_on(r["edl"], "trk_v1")
+    scaled = [c for c in clips if (c.get("transform") or {}).get("scale")]
+    assert len(scaled) == 1
+    assert scaled[0]["start_ms"] == 6000  # emphasis lands on the peak window
+
+
+def test_add_emphasis_no_saliency_errors(engine: Engine):
+    pid = _project_with_analyzed_asset(engine, understanding_with(silence=[]))
+    with pytest.raises(Rejected) as exc:
+        engine.apply(pid, engine.get_project(pid)["head_rev"],
+                     [{"op": "add_emphasis", "clip": "clp_a1"}])  # no at_ms, no saliency
+    assert exc.value.issues[0].code == "E_RANGE"
+
+
 def test_still_later_phase_ops_rejected(engine: Engine):
     u = understanding_with(silence=[])
     pid = _project_with_analyzed_asset(engine, u)

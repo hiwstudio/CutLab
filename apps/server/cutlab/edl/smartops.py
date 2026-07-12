@@ -129,6 +129,43 @@ def group_words_into_phrases(
     return phrases
 
 
+def plan_add_emphasis(
+    edl, clip: MediaClip, understanding: "Understanding | None",
+    at_ms: int | None, duration_ms: int, scale: float, new_ids: tuple[str, str],
+) -> list[dict]:
+    """Punch-in emphasis: isolate [at, at+duration) of a clip via splits and
+    scale that piece up. If at_ms is None, use the saliency peak that falls
+    inside the clip's source window (requires understanding)."""
+    start, end = clip.start_ms, clip.end_ms()
+
+    if at_ms is None:
+        if understanding is None or not understanding.saliency:
+            return []  # caller raises E_NO_UNDERSTANDING
+        best = None
+        for w in understanding.saliency.windows:
+            tl = overlap_source_span(clip, w.start_ms, w.end_ms)
+            if tl and (best is None or w.score > best[0]):
+                best = (w.score, tl[0])
+        if best is None:
+            return []
+        at_ms = best[1]
+
+    at_ms = max(start, min(at_ms, end - 50))
+    seg_end = min(at_ms + max(50, duration_ms), end)
+
+    ops: list[dict] = []
+    mid_id = clip.id
+    if at_ms > start:
+        ops.append({"op": "split", "clip": clip.id, "at_ms": at_ms, "new_id": new_ids[0]})
+        mid_id = new_ids[0]
+    if seg_end < end:
+        ops.append({"op": "split", "clip": mid_id, "at_ms": seg_end, "new_id": new_ids[1]})
+    old_scale = clip.transform.scale if clip.transform else 1.0
+    ops.append({"op": "set_transform", "clip": mid_id,
+                "transform": {"scale": round(min(10.0, old_scale * scale), 3)}})
+    return ops
+
+
 def plan_caption_from_transcript(
     edl, understanding: "Understanding", asset_id: str, track_id: str,
     max_words: int, max_gap_ms: int, cap_style: str | None,
