@@ -680,11 +680,43 @@ class AddEmphasis(_OpBase):
         return f"emphasize {self.clip} ({self.scale}x for {self.duration_ms}ms)"
 
 
+class Compact(_OpBase):
+    """P4: saliency-driven compaction — keep the best-scoring spans of an
+    asset until the timeline fits the target duration; delete the rest."""
+
+    op: Literal["compact"]
+    asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
+    target_ms: int = Field(gt=0)
+    band_ms: tuple[int, int] | None = None    # candidate duration band
+    sweet_ms: tuple[int, int] | None = None   # scoring sweet spot
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from ..engines import compaction
+
+        if ctx is None:
+            raise OpError("E_NO_UNDERSTANDING", "asset", "no op context available")
+        u = ctx.require_understanding(self.asset)
+        band = tuple(self.band_ms) if self.band_ms else compaction.DEFAULT_BAND
+        sweet = tuple(self.sweet_ms) if self.sweet_ms else compaction.DEFAULT_SWEET
+        # Small target -> shrink the band so candidates can fit the budget.
+        band = (min(band[0], max(2000, self.target_ms // 3)), min(band[1], self.target_ms))
+        sweet = (min(sweet[0], band[1]), min(sweet[1], band[1]))
+        cands = compaction.score(compaction.candidates(u, band), u, sweet)
+        keep = compaction.select(cands, self.target_ms)
+        if not keep:
+            raise OpError("E_RANGE", "target_ms", "no viable segments for this target")
+        plan = compaction.plan_compact(edl, self.asset, keep)
+        _apply_primitive_ops(edl, plan, ctx)
+        kept_ms = sum(c.duration_ms for c in keep)
+        return (f"compact {self.asset} to ~{kept_ms}ms "
+                f"({len(keep)} segment(s), target {self.target_ms}ms)")
+
+
 # -- later-phase ops: enum defined now, E_NOT_IMPLEMENTED on apply ------------
 
 LATER_PHASE_OPS = (
     "duck", "denoise", "fade", "apply_effect", "add_transition",
-    "find", "compact", "apply_style", "reorder",
+    "find", "apply_style", "reorder",
 )
 
 
@@ -701,7 +733,8 @@ Op = Annotated[
         AddTrack, RemoveTrack, AddClip, RemoveClip, Trim, Split, Move,
         DeleteRange, SetSpeed, SetGain, SetTransform, SetCrop, SetCanvas,
         AddCaption, SetProject, AddAsset, SetUnderstanding,
-        RemoveSilence, CaptionFromTranscript, Reframe, AddEmphasis, LaterPhaseOp,
+        RemoveSilence, CaptionFromTranscript, Reframe, AddEmphasis, Compact,
+        LaterPhaseOp,
     ],
     Field(discriminator="op"),
 ]

@@ -364,7 +364,7 @@ def test_add_emphasis_no_saliency_errors(engine: Engine):
 def test_still_later_phase_ops_rejected(engine: Engine):
     u = understanding_with(silence=[])
     pid = _project_with_analyzed_asset(engine, u)
-    for op in ("compact", "reorder", "duck", "find"):
+    for op in ("reorder", "duck", "find", "apply_style"):
         with pytest.raises(Rejected) as exc:
             engine.apply(pid, engine.get_project(pid)["head_rev"], [{"op": op}])
         assert exc.value.issues[0].code == "E_NOT_IMPLEMENTED"

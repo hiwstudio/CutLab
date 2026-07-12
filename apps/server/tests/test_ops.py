@@ -398,7 +398,7 @@ def test_set_understanding(engine: Engine, project: str):
 def test_later_phase_ops_not_implemented(engine: Engine, project: str):
     # remove_silence / caption_from_transcript / reframe are implemented in P2;
     # these remain later-phase.
-    for op in ("compact", "reorder", "duck", "find", "apply_style"):
+    for op in ("reorder", "duck", "find", "apply_style", "fade"):
         with pytest.raises(Rejected) as exc:
             apply(engine, project, [{"op": op}])
         assert exc.value.issues[0].code == "E_NOT_IMPLEMENTED"

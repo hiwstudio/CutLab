@@ -62,6 +62,33 @@ build spec. Resolutions:
   `cwd=work_dir` — sidesteps Windows drive-colon escaping in filtergraphs
   entirely (same trick viral-clip-engine uses).
 
+## Phase 4 — Compaction Engine + Telegram gate
+
+- **The proposal system IS the approval gate.** A compaction job never commits:
+  it proposes (`compact` op in propose mode) and the human decides — in Studio's
+  review panel or via Telegram. The Telegram bot is a thin remote surface calling
+  the same engine accept/reject; the engine owns semantics (per the owner's
+  telegram-gate conventions: bot stays thin, idempotent taps, silent unauthorized
+  ignore, decision edits the message).
+- **Deterministic rubric core; LLM judgment is additive.** The clip-scoring
+  rubric's computable signals (saliency coverage, word density, duration fit,
+  silence penalty, boundary snapping, NMS >50%) run deterministically over the
+  P1 understanding. Hook-strength/self-containment/payoff need an LLM pass —
+  pluggable later through the same backend as the director; weights per profile,
+  never a forked rubric. The report follows the rubric's output contract
+  (clip_id/score/subscores/rationale/hook_text/suggested_title) at
+  `understanding/{asset}.compaction.json`.
+- **Telegram credentials** come from env (`CUTLAB_TELEGRAM_TOKEN` /
+  `_CHAT_ID` / `_APPROVERS`); unconfigured -> the gate stage records "skipped"
+  and the proposal waits in Studio. The full gate round-trip (approve, reject,
+  double-tap idempotency, unauthorized ignore, message edit) is unit-tested via
+  an injected transport; a LIVE round-trip still requires the owner's bot token
+  and remains open until they provide it to the environment.
+- **`compact` keeps story order** (selected segments chronological), applies the
+  target band adaptively (band shrinks for small targets), and deletes the
+  complement right-to-left with ripple — same rounding-safe pattern as
+  remove_silence.
+
 ## Phase 2 — AI Director (in progress)
 
 A11 scopes P2 as: AI Director v1 (context compiler, plan→propose→accept loop,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Understanding } from "@/lib/types";
 
 function ms(v: number): string {
@@ -16,16 +17,20 @@ export function UnderstandingPanel({
   onClose,
   captionTrackId,
   onPropose,
+  onCompact,
 }: {
   name: string;
   understanding: Understanding;
   onClose: () => void;
   captionTrackId: string | null;
   onPropose: (op: Record<string, unknown>) => void;
+  onCompact: (targetMs: number) => void;
 }) {
   const u = understanding;
   const hasSilence = u.silence.length > 0;
   const hasSpeech = (u.transcript?.segments.length ?? 0) > 0;
+  const hasContent = hasSpeech || u.active_ranges.length > 0;
+  const [compactTarget, setCompactTarget] = useState(30_000);
   const words = u.transcript?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
   const peak =
     u.saliency && u.saliency.windows.length
@@ -144,6 +149,37 @@ export function UnderstandingPanel({
           </div>
           <p className="mt-1 text-[10px] text-zinc-600">
             Each proposes a revision you review and accept in the AI Director panel.
+          </p>
+        </div>
+
+        <div className="mt-3 border-t border-zinc-800 pt-3" data-testid="compact-section">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+            Compaction engine
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              data-testid="compact-target"
+              className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-[11px] text-zinc-200"
+              value={compactTarget}
+              onChange={(e) => setCompactTarget(Number(e.target.value))}
+            >
+              <option value={30_000}>~30s short</option>
+              <option value={60_000}>~60s short</option>
+              <option value={120_000}>~2min cut</option>
+            </select>
+            <button
+              data-testid="compact-run"
+              disabled={!hasContent}
+              className="rounded bg-fuchsia-800 px-2 py-1 text-[11px] font-semibold text-fuchsia-100 enabled:hover:bg-fuchsia-700 disabled:opacity-40"
+              onClick={() => onCompact(compactTarget)}
+              title={hasContent ? "" : "No speech or active ranges detected"}
+            >
+              Compact
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-zinc-600">
+            Scores the best moments (saliency + density + fit), keeps them in story
+            order, and proposes the short cut for your review.
           </p>
         </div>
 

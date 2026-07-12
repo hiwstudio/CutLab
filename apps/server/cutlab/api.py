@@ -24,6 +24,7 @@ from .edl.engine import Conflict, Engine, NotFound, Rejected
 from .edl.schema import LEGAL_FPS
 from .director.backends import LLMError
 from .director.director import AwaitingAnswer, Director, PlanRejected, Proposed
+from .jobs.compaction import compaction_handler
 from .jobs.ingest import ingest_handler
 from .jobs.queue import JobQueue
 from .jobs.understanding import understanding_handler
@@ -90,6 +91,7 @@ class AppState:
         self.worker.register("ingest", ingest_handler)
         self.worker.register("render", render_handler)
         self.worker.register("understanding", understanding_handler)
+        self.worker.register("compaction", compaction_handler)
         # Director backend is chosen from config; fall back to manual if an
         # automatic backend is configured without its key. Swappable in tests.
         from .director.backends import ManualBackend, make_backend
@@ -331,6 +333,30 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
             "src": row["src"], "project_dir": str(state.projects_dir / project_id),
         }, project_id=project_id)
         return {"asset_id": asset_id, "job_id": job_id, "status": "analyzing"}
+
+    @api.post("/projects/{project_id}/assets/{asset_id}/compact")
+    async def compact_asset(project_id: str, asset_id: str, body: dict):
+        """P4: durable compaction job — candidates -> proposal -> gate."""
+        state.engine.get_project(project_id)
+        row = state.db.query_one(
+            "SELECT understanding FROM assets WHERE project_id=? AND asset_id=?",
+            (project_id, asset_id),
+        )
+        if row is None:
+            return error_response(404, "E_NOT_FOUND", f"asset {asset_id} not found")
+        if not row["understanding"]:
+            return error_response(409, "E_NOT_ANALYZED", "analyze the asset first")
+        try:
+            target_ms = int((body or {}).get("target_ms", 0))
+        except (TypeError, ValueError):
+            target_ms = 0
+        if target_ms <= 0:
+            return error_response(422, "E_VALIDATION", "target_ms (positive int) required")
+        job_id = state.queue.enqueue("compaction", {
+            "project_id": project_id, "asset_id": asset_id, "target_ms": target_ms,
+            "project_dir": str(state.projects_dir / project_id),
+        }, project_id=project_id)
+        return {"job_id": job_id, "asset_id": asset_id, "target_ms": target_ms}
 
     @api.get("/projects/{project_id}/assets/{asset_id}/understanding")
     async def get_understanding(project_id: str, asset_id: str):

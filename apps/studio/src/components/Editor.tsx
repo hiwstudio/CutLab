@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api";
 import type { AssetRow, Job } from "@/lib/types";
 import { clipEndMs, isMediaClip } from "@/lib/types";
 import { useEditor } from "@/lib/useEditor";
@@ -346,6 +347,11 @@ export function Editor({ projectId }: { projectId: string }) {
             ed.edl?.tracks.find((t) => t.kind === "caption" || t.kind === "text")?.id ?? null
           }
           onPropose={proposeSmartEdit}
+          onCompact={async (targetMs) => {
+            if (!insights) return;
+            await api.compactAsset(projectId, insights.assetId, targetMs);
+            setInsights(null); // job runs; proposal appears in the review panel
+          }}
         />
       )}
 

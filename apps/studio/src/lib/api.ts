@@ -116,6 +116,11 @@ export const api = {
       body: JSON.stringify({ request_id: requestId, answer }),
     }),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
+  compactAsset: (id: string, assetId: string, targetMs: number) =>
+    request<{ job_id: string }>(
+      `/api/v1/projects/${id}/assets/${assetId}/compact`,
+      { method: "POST", body: JSON.stringify({ target_ms: targetMs }) },
+    ),
   previewSegment: (id: string, fromMs: number, toMs: number, rev?: number) =>
     request<{ job_id: string; rev: number; output: string }>(
       `/api/v1/projects/${id}/preview`,
