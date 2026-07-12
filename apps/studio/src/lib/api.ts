@@ -116,6 +116,14 @@ export const api = {
       body: JSON.stringify({ request_id: requestId, answer }),
     }),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
+  previewSegment: (id: string, fromMs: number, toMs: number, rev?: number) =>
+    request<{ job_id: string; rev: number; output: string }>(
+      `/api/v1/projects/${id}/preview`,
+      {
+        method: "POST",
+        body: JSON.stringify({ from_ms: fromMs, to_ms: toMs, ...(rev !== undefined && { rev }) }),
+      },
+    ),
 };
 
 export function mediaUrl(projectId: string, relPath: string): string {

@@ -302,6 +302,7 @@ export function Editor({ projectId }: { projectId: string }) {
             playheadMs={ed.playheadMs}
             renderJob={renderJob}
             onRender={onRender}
+            onSeek={ed.setPlayhead}
           />
         </div>
         <div className="flex w-64 shrink-0 flex-col border-l border-zinc-800">

@@ -10,7 +10,7 @@
     },
     {
       "name": "server",
-      "runtimeExecutable": "apps/server/.venv/Scripts/python.exe",
+      "runtimeExecutable": "C:\\Users\\ALLTRON\\content\\CutLab\\apps\\server\\.venv\\Scripts\\python.exe",
       "runtimeArgs": ["-m", "cutlab.main"],
       "cwd": "apps/server",
       "port": 8787
