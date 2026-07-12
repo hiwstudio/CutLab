@@ -27,6 +27,7 @@ from .director.director import AwaitingAnswer, Director, PlanRejected, Proposed
 from .jobs.compaction import compaction_handler
 from .jobs.ingest import ingest_handler
 from .jobs.queue import JobQueue
+from .jobs.recap import recap_handler
 from .jobs.understanding import understanding_handler
 from .jobs.worker import Worker
 from .render.runner import render_handler
@@ -92,6 +93,7 @@ class AppState:
         self.worker.register("render", render_handler)
         self.worker.register("understanding", understanding_handler)
         self.worker.register("compaction", compaction_handler)
+        self.worker.register("recap", recap_handler)
         # Director backend is chosen from config; fall back to manual if an
         # automatic backend is configured without its key. Swappable in tests.
         from .director.backends import ManualBackend, make_backend
@@ -357,6 +359,31 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
             "project_dir": str(state.projects_dir / project_id),
         }, project_id=project_id)
         return {"job_id": job_id, "asset_id": asset_id, "target_ms": target_ms}
+
+    @api.post("/projects/{project_id}/assets/{asset_id}/recap")
+    async def recap_asset(project_id: str, asset_id: str, body: dict):
+        """P5: durable recap job — outline -> script -> TTS -> match -> proposal."""
+        state.engine.get_project(project_id)
+        row = state.db.query_one(
+            "SELECT understanding FROM assets WHERE project_id=? AND asset_id=?",
+            (project_id, asset_id),
+        )
+        if row is None:
+            return error_response(404, "E_NOT_FOUND", f"asset {asset_id} not found")
+        if not row["understanding"]:
+            return error_response(409, "E_NOT_ANALYZED", "analyze the asset first")
+        try:
+            target_minutes = int((body or {}).get("target_minutes", 0))
+        except (TypeError, ValueError):
+            target_minutes = 0
+        if target_minutes <= 0:
+            return error_response(422, "E_VALIDATION", "target_minutes (positive int) required")
+        job_id = state.queue.enqueue("recap", {
+            "project_id": project_id, "asset_id": asset_id,
+            "target_minutes": target_minutes,
+            "project_dir": str(state.projects_dir / project_id),
+        }, project_id=project_id)
+        return {"job_id": job_id, "asset_id": asset_id, "target_minutes": target_minutes}
 
     @api.get("/projects/{project_id}/assets/{asset_id}/understanding")
     async def get_understanding(project_id: str, asset_id: str):

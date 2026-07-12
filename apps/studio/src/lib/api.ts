@@ -116,6 +116,11 @@ export const api = {
       body: JSON.stringify({ request_id: requestId, answer }),
     }),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
+  recapAsset: (id: string, assetId: string, targetMinutes: number) =>
+    request<{ job_id: string }>(
+      `/api/v1/projects/${id}/assets/${assetId}/recap`,
+      { method: "POST", body: JSON.stringify({ target_minutes: targetMinutes }) },
+    ),
   compactAsset: (id: string, assetId: string, targetMs: number) =>
     request<{ job_id: string }>(
       `/api/v1/projects/${id}/assets/${assetId}/compact`,

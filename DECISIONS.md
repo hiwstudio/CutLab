@@ -89,6 +89,32 @@ build spec. Resolutions:
   complement right-to-left with ripple — same rounding-safe pattern as
   remove_silence.
 
+## Phase 5 — Recap Engine
+
+- **Recap emits EDL ops, not its own ffmpeg** (the integration rule in
+  CLAUDE.md). recap-engine's assembly (per-beat footage fit, duck original
+  audio, concat) maps to: matched-scene video clips with `gain_db=-25`
+  (CutLab's audio graph already applies gain), narration wavs as audio assets
+  + clips, footage speed-fitted (0.5–1.0x) to the measured narration length.
+  The whole recap is ONE transactional proposal the owner accepts/rejects.
+- **Piper, not ElevenLabs.** A11 mentions ElevenLabs, but the owner's
+  recap-engine locked Piper (free, local, CPU) with the lessac voice measured
+  at ~200 wpm — that engine and its calibration are the source of truth.
+  `CUTLAB_PIPER_VOICE` overrides; defaults to the recap-engine voice path.
+- **Prompts carried over near-verbatim** from recap-engine's story.py (map/
+  reduce outline + script prompts, spoiler-recap system prompt) — they're
+  production-tuned. Length policy: accept natural TTS duration (owner's locked
+  decision; no rewrite loop).
+- **Scene matching = time prior + dialogue token overlap.** recap-engine's
+  CLIP visual term (w=0.35, ~730MB ONNX models) is deferred; its weight slot
+  remains so wiring the models in later is config, not redesign. The coverage
+  rule (extend across consecutive scenes until footage covers narration) is
+  carried over.
+- **Manual-LLM hand-off inside a durable job**: the stage writes
+  `recap/{asset}/{step}.prompt.txt` and polls (cancellable) for
+  `{step}.answer.txt` — recap-engine's own file hand-off, resume included.
+  Automatic backends answer inline.
+
 ## Phase 2 — AI Director (in progress)
 
 A11 scopes P2 as: AI Director v1 (context compiler, plan→propose→accept loop,

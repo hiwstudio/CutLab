@@ -18,6 +18,7 @@ export function UnderstandingPanel({
   captionTrackId,
   onPropose,
   onCompact,
+  onRecap,
 }: {
   name: string;
   understanding: Understanding;
@@ -25,12 +26,14 @@ export function UnderstandingPanel({
   captionTrackId: string | null;
   onPropose: (op: Record<string, unknown>) => void;
   onCompact: (targetMs: number) => void;
+  onRecap: (targetMinutes: number) => void;
 }) {
   const u = understanding;
   const hasSilence = u.silence.length > 0;
   const hasSpeech = (u.transcript?.segments.length ?? 0) > 0;
   const hasContent = hasSpeech || u.active_ranges.length > 0;
   const [compactTarget, setCompactTarget] = useState(30_000);
+  const [recapTarget, setRecapTarget] = useState(5);
   const words = u.transcript?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
   const peak =
     u.saliency && u.saliency.windows.length
@@ -180,6 +183,37 @@ export function UnderstandingPanel({
           <p className="mt-1 text-[10px] text-zinc-600">
             Scores the best moments (saliency + density + fit), keeps them in story
             order, and proposes the short cut for your review.
+          </p>
+        </div>
+
+        <div className="mt-3 border-t border-zinc-800 pt-3" data-testid="recap-section">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+            Recap engine
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              data-testid="recap-target"
+              className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-[11px] text-zinc-200"
+              value={recapTarget}
+              onChange={(e) => setRecapTarget(Number(e.target.value))}
+            >
+              <option value={2}>~2 min recap</option>
+              <option value={5}>~5 min recap</option>
+              <option value={12}>~12 min recap</option>
+            </select>
+            <button
+              data-testid="recap-run"
+              disabled={!hasSpeech}
+              className="rounded bg-amber-800 px-2 py-1 text-[11px] font-semibold text-amber-100 enabled:hover:bg-amber-700 disabled:opacity-40"
+              onClick={() => onRecap(recapTarget)}
+              title={hasSpeech ? "" : "Recap needs a transcript"}
+            >
+              Recap
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-zinc-600">
+            Outlines the story, writes original narration (LLM), voices it with
+            Piper, matches scenes, and proposes the recap timeline.
           </p>
         </div>
 

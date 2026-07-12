@@ -352,6 +352,11 @@ export function Editor({ projectId }: { projectId: string }) {
             await api.compactAsset(projectId, insights.assetId, targetMs);
             setInsights(null); // job runs; proposal appears in the review panel
           }}
+          onRecap={async (targetMinutes) => {
+            if (!insights) return;
+            await api.recapAsset(projectId, insights.assetId, targetMinutes);
+            setInsights(null);
+          }}
         />
       )}
 
