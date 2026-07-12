@@ -115,6 +115,25 @@ build spec. Resolutions:
   `{step}.answer.txt` — recap-engine's own file hand-off, resume included.
   Automatic backends answer inline.
 
+## Phase 6 — Capability registry + brand profiles
+
+- **Registry = built-ins + `capabilities/*.json` manifests**, one module
+  (`cutlab/capabilities.py`), four kinds: effect (ffmpeg filter template,
+  numeric-only params so nothing injectable reaches the filtergraph),
+  transition (outgoing-tail filter with start/duration placeholders),
+  caption_style (ASS overrides merged over defaults), export_preset (final
+  encode args). The validator's known-caps, the render planner/compiler, the
+  caption builder, and the mux encode all resolve through it — adding a
+  capability is a JSON drop, no core change (A2.6 satisfied).
+- **Transitions v1 = outgoing-edge fades** (`fade`, `fade-white`) applied
+  inside the piece chain. Cross-clip xfade needs overlapping stream windows in
+  the chunk graph — deferred with the registry slot ready.
+- **Brand profiles**: `systemlab` (speech-weighted, boxed captions, social
+  preset), `warriors-at-war` (scene/beat-weighted montage, bold-pop, archive),
+  `seatpass` (vertical 1080×1920 default, punchy short band). Profiles carry
+  saliency weights + compaction band + caption_style + export_preset;
+  `set_project {profile}` switches a project's brand.
+
 ## Phase 2 — AI Director (in progress)
 
 A11 scopes P2 as: AI Director v1 (context compiler, plan→propose→accept loop,

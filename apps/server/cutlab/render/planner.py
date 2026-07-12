@@ -29,6 +29,8 @@ class VideoPiece:
     scale: float = 1.0
     offset_x: int = 0
     offset_y: int = 0
+    effects: list[tuple[str, dict]] = field(default_factory=list)  # (cap, params)
+    transition_out: tuple[str, int] | None = None                  # (cap, duration_ms)
 
 
 @dataclass
@@ -61,6 +63,7 @@ class Plan:
     captions: list[CaptionPiece] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     quality: str = "final"  # final | preview (L1 segment renders: fast encode)
+    export: str | None = None  # export_preset capability id (final renders)
 
     @property
     def chunks(self) -> list[tuple[int, int]]:
@@ -100,10 +103,21 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
         for clip in track.clips:
             assert isinstance(clip, MediaClip)
             asset = edl.assets[clip.asset]
-            if clip.effects:
-                plan.warnings.append(f"clip {clip.id}: {len(clip.effects)} effect(s) skipped")
+            from .. import capabilities
+
+            effects: list[tuple[str, dict]] = []
+            for eff in clip.effects:
+                if capabilities.get(eff.cap, "effect"):
+                    effects.append((eff.cap, dict(eff.params)))
+                else:
+                    plan.warnings.append(f"clip {clip.id}: unknown effect '{eff.cap}' skipped")
+            transition: tuple[str, int] | None = None
             if clip.transition_out:
-                plan.warnings.append(f"clip {clip.id}: transition_out skipped")
+                if capabilities.get(clip.transition_out.cap, "transition"):
+                    transition = (clip.transition_out.cap, clip.transition_out.duration_ms)
+                else:
+                    plan.warnings.append(
+                        f"clip {clip.id}: unknown transition '{clip.transition_out.cap}' skipped")
             if clip.transform and clip.transform.rotate:
                 plan.warnings.append(f"clip {clip.id}: rotate not rendered in Phase 0")
 
@@ -114,6 +128,7 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
                     in_ms=clip.in_ms, out_ms=clip.out_ms, speed=clip.speed,
                     start_ms=clip.start_ms, end_ms=clip.end_ms(),
                     asset_w=asset.width or 0, asset_h=asset.height or 0,
+                    effects=effects, transition_out=transition,
                 )
                 if clip.crop:
                     piece.crop_mode = clip.crop.mode

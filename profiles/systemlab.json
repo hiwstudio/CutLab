@@ -1,0 +1,13 @@
+{
+  "id": "systemlab",
+  "name": "SystemLab",
+  "description": "Talking-head systems/education content: speech is king, silence is dead weight, cuts matter less than words.",
+  "canvas_default": { "width": 1920, "height": 1080, "fps": 30 },
+  "saliency": {
+    "window_ms": 2000,
+    "weights": { "speech": 1.0, "scene": 0.2, "beat": 0.1, "silence": 1.0 }
+  },
+  "compaction": { "band_ms": [15000, 58000], "sweet_ms": [25000, 40000] },
+  "caption_style": "boxed",
+  "export_preset": "h264-social"
+}

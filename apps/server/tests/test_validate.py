@@ -166,12 +166,23 @@ def test_video_asset_allowed_on_audio_track():
 
 def test_unknown_caps_warn_not_error():
     edl = base_edl()
-    edl["tracks"][0]["clips"][0]["effects"] = [{"cap": "vignette", "params": {"amount": 0.5}}]
-    edl["tracks"][0]["clips"][0]["transition_out"] = {"cap": "crossfade", "duration_ms": 500}
-    edl["tracks"][1]["clips"][0]["cap_style"] = "bold-pop"
+    edl["tracks"][0]["clips"][0]["effects"] = [{"cap": "no-such-fx", "params": {"amount": 0.5}}]
+    edl["tracks"][0]["clips"][0]["transition_out"] = {"cap": "no-such-tr", "duration_ms": 500}
+    edl["tracks"][1]["clips"][0]["cap_style"] = "no-such-style"
     r = validate(edl)
     assert r.valid
     assert len([w for w in r.warnings if w.code == "W_UNKNOWN_CAP"]) == 3
+
+
+def test_registered_caps_do_not_warn():
+    # P6: registry ids (built-ins here) are known — no warnings.
+    edl = base_edl()
+    edl["tracks"][0]["clips"][0]["effects"] = [{"cap": "vignette", "params": {}}]
+    edl["tracks"][0]["clips"][0]["transition_out"] = {"cap": "fade", "duration_ms": 500}
+    edl["tracks"][1]["clips"][0]["cap_style"] = "bold-pop"
+    r = validate(edl)
+    assert r.valid
+    assert [w for w in r.warnings if w.code == "W_UNKNOWN_CAP"] == []
 
 
 def test_speed_affects_overlap():

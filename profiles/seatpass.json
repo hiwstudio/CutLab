@@ -1,0 +1,13 @@
+{
+  "id": "seatpass",
+  "name": "SeatPass",
+  "description": "Event/venue short-form: vertical-first, punchy, balanced speech and visuals for social feeds.",
+  "canvas_default": { "width": 1080, "height": 1920, "fps": 30 },
+  "saliency": {
+    "window_ms": 1500,
+    "weights": { "speech": 0.8, "scene": 0.6, "beat": 0.5, "silence": 0.8 }
+  },
+  "compaction": { "band_ms": [10000, 45000], "sweet_ms": [15000, 30000] },
+  "caption_style": "bold-pop",
+  "export_preset": "h264-social"
+}

@@ -45,6 +45,10 @@ def render_handler(ctx) -> None:
 
     asset_audio = _resolve_asset_audio(ctx.queue.db, edl, project_id, project_dir)
     plan = build_plan(edl, asset_audio)
+    # Final renders encode with the project profile's export preset (P6).
+    from ..profiles import export_preset
+
+    plan.export = inp.get("export") or export_preset(edl.project.profile)
     # L1 segment preview: window the plan and use the fast encode path.
     range_ms = inp.get("range_ms")
     if range_ms:

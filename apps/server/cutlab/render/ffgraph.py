@@ -30,6 +30,18 @@ def chunk_path(work_dir: Path, index: int) -> Path:
     return work_dir / f"chunk_{index:04d}.mp4"
 
 
+def _encode_args(plan: Plan) -> list[str]:
+    if plan.quality == "preview":
+        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+                "-c:a", "aac", "-b:a", "128k"]
+    from .. import capabilities
+
+    preset = capabilities.export_args(plan.export or "h264-archive") \
+        or capabilities.export_args("h264-archive")
+    video, audio = preset
+    return [*video, *audio]
+
+
 def chunk_ass_name(index: int) -> str:
     return f"chunk_{index:04d}.ass"
 
@@ -66,6 +78,7 @@ def _crop_geometry(piece: VideoPiece, canvas_w: int, canvas_h: int) -> tuple[str
 def _piece_video_chain(
     piece: VideoPiece, input_index: int, label: str,
     canvas_w: int, canvas_h: int, fps: float, offset_ms: int,
+    vis0_ms: int = 0,
 ) -> tuple[str, int, int]:
     """Filter chain for one visible video piece; returns (chain, x, y)."""
     crop, w1, h1 = _crop_geometry(piece, canvas_w, canvas_h)
@@ -85,6 +98,24 @@ def _piece_video_chain(
     steps.append(f"scale={w2}:{h2}")
     steps.append("setsar=1")
     steps.append("format=yuv420p")
+
+    # Registry effects (validated caps only reach the plan).
+    from .. import capabilities
+
+    for cap_id, params in piece.effects:
+        f = capabilities.effect_filter(cap_id, params)
+        if f:
+            steps.append(f)
+    # Outgoing transition at the CLIP's tail. Piece-local time is 0 at vis0_ms
+    # and timeline-scaled (setpts already divided by speed), so the fade starts
+    # at (clip end - duration - vis0) in piece-local seconds.
+    if piece.transition_out:
+        cap_id, dur_ms = piece.transition_out
+        st_s = max(0.0, (piece.end_ms - dur_ms - vis0_ms) / 1000)
+        f = capabilities.transition_filter(cap_id, st_s, dur_ms / 1000)
+        if f:
+            steps.append(f)
+
     if offset_ms > 0:
         steps.append(f"setpts=PTS+{_sec(offset_ms)}/TB")
     return f"[{input_index}:v]" + ",".join(steps) + f"[{label}]", x, y
@@ -121,7 +152,8 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
                 inputs += ["-ss", _sec(src_start), "-t", _sec(src_dur), "-i", src]
             label = f"p{n_label}"
             chain, x, y = _piece_video_chain(
-                piece, n_inputs, label, plan.width, plan.height, plan.fps, vis0 - t0,
+                piece, n_inputs, label, plan.width, plan.height, plan.fps,
+                vis0 - t0, vis0_ms=vis0,
             )
             filters.append(chain)
             out_label = f"v{n_label}"
@@ -160,11 +192,9 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
         *inputs,
         "-filter_complex", ";".join(filters),
         "-map", f"[{current}]", "-map", "[aout]",
-        # preview (L1 segment) trades quality for turnaround; final is archival.
-        *(["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]
-          if plan.quality == "preview"
-          else ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]),
-        "-c:a", "aac", "-b:a", "128k" if plan.quality == "preview" else "192k",
+        # preview (L1 segment) trades quality for turnaround; final renders use
+        # the export preset from the registry (default h264-archive).
+        *_encode_args(plan),
         "-ar", "48000",
         "-r", fps,
         "-t", dur_s,

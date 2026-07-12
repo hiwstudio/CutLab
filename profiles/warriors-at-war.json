@@ -1,0 +1,13 @@
+{
+  "id": "warriors-at-war",
+  "name": "Warriors at War",
+  "description": "War documentary/montage content: visual cuts and musical energy carry the edit; narration matters but montage rules.",
+  "canvas_default": { "width": 1920, "height": 1080, "fps": 30 },
+  "saliency": {
+    "window_ms": 2000,
+    "weights": { "speech": 0.6, "scene": 0.9, "beat": 0.7, "silence": 0.4 }
+  },
+  "compaction": { "band_ms": [20000, 90000], "sweet_ms": [45000, 75000] },
+  "caption_style": "bold-pop",
+  "export_preset": "h264-archive"
+}

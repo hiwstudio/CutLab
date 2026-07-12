@@ -696,8 +696,12 @@ class Compact(_OpBase):
         if ctx is None:
             raise OpError("E_NO_UNDERSTANDING", "asset", "no op context available")
         u = ctx.require_understanding(self.asset)
-        band = tuple(self.band_ms) if self.band_ms else compaction.DEFAULT_BAND
-        sweet = tuple(self.sweet_ms) if self.sweet_ms else compaction.DEFAULT_SWEET
+        # Explicit params > profile's compaction block > engine defaults.
+        from ..profiles import load_profile
+
+        prof = load_profile(edl.project.profile).get("compaction", {})
+        band = tuple(self.band_ms or prof.get("band_ms") or compaction.DEFAULT_BAND)
+        sweet = tuple(self.sweet_ms or prof.get("sweet_ms") or compaction.DEFAULT_SWEET)
         # Small target -> shrink the band so candidates can fit the budget.
         band = (min(band[0], max(2000, self.target_ms // 3)), min(band[1], self.target_ms))
         sweet = (min(sweet[0], band[1]), min(sweet[1], band[1]))

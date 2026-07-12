@@ -27,8 +27,11 @@ from pydantic import ValidationError
 
 from .schema import EDL, CaptionClip, MediaClip, Track
 
-# Capability registry arrives in a later phase; Phase 0 knows no capabilities.
-KNOWN_CAPS: frozenset[str] = frozenset()
+def _known_caps() -> frozenset[str]:
+    """Capability ids from the P6 registry (built-ins + capabilities/*.json)."""
+    from .. import capabilities
+
+    return capabilities.known_cap_ids()
 
 _PYDANTIC_RANGE_TYPES = {
     "greater_than",
@@ -199,11 +202,11 @@ def _check_media_clip(
                       f"out_ms {clip.out_ms} exceeds asset duration {asset.duration_ms}")
             )
     for ei, eff in enumerate(clip.effects):
-        if eff.cap not in KNOWN_CAPS:
+        if eff.cap not in _known_caps():
             warnings.append(
                 Issue("W_UNKNOWN_CAP", f"{cpath}.effects[{ei}].cap", f"unknown capability '{eff.cap}'")
             )
-    if clip.transition_out and clip.transition_out.cap not in KNOWN_CAPS:
+    if clip.transition_out and clip.transition_out.cap not in _known_caps():
         warnings.append(
             Issue("W_UNKNOWN_CAP", f"{cpath}.transition_out.cap",
                   f"unknown capability '{clip.transition_out.cap}'")
@@ -211,7 +214,7 @@ def _check_media_clip(
 
 
 def _check_caption_clip(clip: CaptionClip, cpath: str, warnings: list[Issue]) -> None:
-    if clip.cap_style and clip.cap_style not in KNOWN_CAPS:
+    if clip.cap_style and clip.cap_style not in _known_caps():
         warnings.append(
             Issue("W_UNKNOWN_CAP", f"{cpath}.cap_style", f"unknown capability '{clip.cap_style}'")
         )

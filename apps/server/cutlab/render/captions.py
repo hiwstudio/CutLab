@@ -47,7 +47,7 @@ class CaptionStyle:
     margin_v_frac: float = 0.06
 
 
-CAPTION_STYLES: dict[str, CaptionStyle] = {
+_BUILTIN_STYLES: dict[str, CaptionStyle] = {
     s.id: s
     for s in (
         CaptionStyle(id="default", name="Clean"),
@@ -61,6 +61,30 @@ CAPTION_STYLES: dict[str, CaptionStyle] = {
     )
 }
 DEFAULT_STYLE = "default"
+
+_STYLE_FIELDS = {"font", "size_frac", "primary", "outline_colour", "back_colour",
+                 "bold", "border_style", "outline", "shadow", "align", "margin_v_frac"}
+
+
+def caption_styles() -> dict[str, CaptionStyle]:
+    """Built-ins + registry `caption_style` manifests (a manifest may override a
+    built-in by id or add a brand-new style — no code change, per A2.6)."""
+    from .. import capabilities
+
+    styles = dict(_BUILTIN_STYLES)
+    for cap in capabilities.list_caps("caption_style"):
+        overrides = {k: v for k, v in cap.data.items() if k in _STYLE_FIELDS}
+        base = styles.get(cap.id)
+        if base is not None and not overrides:
+            continue  # plain builtin registration
+        merged = {**(base.__dict__ if base else _BUILTIN_STYLES[DEFAULT_STYLE].__dict__),
+                  **overrides, "id": cap.id, "name": cap.name}
+        styles[cap.id] = CaptionStyle(**merged)
+    return styles
+
+
+# Back-compat alias used by tests and build_ass.
+CAPTION_STYLES = _BUILTIN_STYLES
 
 
 def _ass_ts(ms: int) -> str:
@@ -94,17 +118,18 @@ def build_ass(
     """ASS document for captions overlapping `window` [t0,t1), times re-based
     to the window start (chunk-local). None when nothing is visible."""
     t0, t1 = window or (0, 1 << 62)
+    all_styles = caption_styles()
     events = []
     for start, end, text, style_id in captions:
         vis0, vis1 = max(start, t0), min(end, t1)
         if vis0 >= vis1 or not text.strip():
             continue
-        style = CAPTION_STYLES.get(style_id or "", CAPTION_STYLES[DEFAULT_STYLE])
+        style = all_styles.get(style_id or "", all_styles[DEFAULT_STYLE])
         events.append(
             f"Dialogue: 0,{_ass_ts(vis0 - t0)},{_ass_ts(vis1 - t0)},"
             f"{style.id},,0,0,0,,{_esc(text)}"
         )
     if not events:
         return None
-    styles = "\n".join(_style_line(s, height) for s in CAPTION_STYLES.values())
+    styles = "\n".join(_style_line(s, height) for s in all_styles.values())
     return _ASS_HEADER.format(w=width, h=height, styles=styles) + "\n".join(events) + "\n"

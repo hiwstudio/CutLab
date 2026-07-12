@@ -34,3 +34,13 @@ def saliency_config(profile_id: str) -> tuple[int, dict[str, float]]:
     window_ms = int(block.get("window_ms", DEFAULT_WINDOW_MS))
     weights = {**DEFAULT_WEIGHTS, **(block.get("weights", {}))}
     return window_ms, weights
+
+
+def export_preset(profile_id: str) -> str | None:
+    """The profile's default export_preset capability id (None = engine default)."""
+    return load_profile(profile_id).get("export_preset")
+
+
+def caption_style(profile_id: str) -> str | None:
+    """The profile's default caption style capability id."""
+    return load_profile(profile_id).get("caption_style")
