@@ -72,6 +72,24 @@ fenced block, then the first {...} span, and validates it's `{"ops":[...]}` with
 op objects — anything else is a clean LLMError, not a crash. Always parse
 defensively; never `json.loads` a raw completion and assume success.
 
+## The engines are integration layers over the EDL, never parallel pipelines
+Compaction and recap don't run their own ffmpeg or mutate media: they compute a
+plan (pure functions over understanding data) and emit ONE transactional
+proposal of ordinary ops. Everything downstream (render, undo, diffs, gates,
+Studio review) works on them for free. Any future engine (P-whatever) must
+follow this shape.
+
+## rAF is not a clock — media elements are
+requestAnimationFrame freezes in hidden tabs; a transport clock built on it
+stalls while videos keep playing. Drive playback time from the playing media
+element's currentTime (interval-corrected), and A/V sync becomes structural
+instead of chased.
+
+## Filtergraph parameters are an injection surface
+Anything templated into an ffmpeg -filter_complex string must be validated to
+numerics first (capabilities.effect_filter rejects strings). A "radius" of
+"8,evil=1" would otherwise splice arbitrary filters into the graph.
+
 ## Don't round-trip UTF-8 text through PowerShell 5.1 cmdlets
 `Get-Content -Raw | Set-Content -Encoding utf8` on BOM-less UTF-8 misreads it as
 ANSI and double-encodes non-ASCII (em-dashes → mojibake). Use the file tools or

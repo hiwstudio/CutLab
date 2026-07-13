@@ -27,10 +27,23 @@ test("L0 compositor playback + L1 segment preview", async ({ page }) => {
   await expect(compositor).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("video[data-testid^=layer-]")).toHaveCount(1);
 
-  // Transport: play advances the playhead clock; pause holds it.
+  // Transport: play advances the playhead clock; pause holds it. Wait for the
+  // proxy to be decodable first so a cold server can't starve the media clock.
+  await page.waitForFunction(() => {
+    const v = document.querySelector<HTMLVideoElement>("video[data-testid^=layer-]");
+    return !!v && v.readyState >= 2;
+  }, { timeout: 30_000 });
   const clock = page.locator("span", { hasText: /s \/ / }).last();
   await page.getByTestId("play-button").click();
-  await page.waitForTimeout(1500);
+  await page.waitForFunction(
+    (sel) => {
+      const el = [...document.querySelectorAll("span")].find((s) =>
+        /s \/ /.test(s.textContent ?? ""));
+      return parseFloat((el?.textContent ?? "0").split("s /")[0]) > 0.3;
+    },
+    undefined,
+    { timeout: 20_000 },
+  );
   await page.getByTestId("play-button").click();
   const t = parseFloat((await clock.textContent())!.split("s /")[0]);
   expect(t).toBeGreaterThan(0.3);

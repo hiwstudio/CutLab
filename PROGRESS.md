@@ -110,5 +110,52 @@ deterministic foundation first (needs no LLM), then the director on top.
 **Phase 2 complete.** Server suite: 163 fast tests pass (+ slow). Studio: smoke,
 understanding, proposals, director Playwright specs pass. The director proposes;
 the human always accepts/rejects. Automatic backends (openrouter/anthropic) work
-by adding a key to the env; manual is the default and needs none. Next phase (P3:
-L0 compositor + Remotion caption styles) starts only on the owner's request.
+by adding a key to the env; manual is the default and needs none.
+
+---
+
+# PROGRESS — Phases 3–7 (full build-out, 2026-07-05)
+
+## P3 — Preview ladder + captions
+- [x] P3.1 add_emphasis (saliency-driven punch-in) — `tests/test_smartops.py`
+- [x] P3.2 L1 segment previews (window_plan + fast encode + /preview) — `tests/test_preview.py`
+- [x] P3.3 L0 browser compositor (layered live preview, media-clock transport,
+      caption overlays) — `apps/studio/tests/compositor.spec.ts`
+- [x] P3.4 Captions burn into renders (ASS/libass per chunk, 4 styles;
+      registry-ready; Remotion deferred — see DECISIONS) — `tests/test_captions_render.py`
+
+## P4 — Compaction Engine + Telegram gate
+- [x] Deterministic clip-scoring rubric core + compact op — `tests/test_compaction.py`
+- [x] Durable compaction job (candidates → propose → gate) + report contract
+- [x] Telegram gate (thin bot on proposal accept/reject; round-tripped with an
+      injected transport) — `tests/test_telegram_gate.py`. LIVE round-trip
+      pending the owner's bot token in env.
+
+## P5 — Recap Engine
+- [x] Outline/script prompts (adapted from recap-engine), pluggable LLM,
+      manual file hand-off inside the durable job
+- [x] Piper TTS (real synthesis in tests), loudnorm, measured durations
+- [x] Time-prior + dialogue matching with coverage extension (CLIP visual
+      matching deferred — weight slot kept)
+- [x] EDL assembly as one transactional proposal — `tests/test_recap.py`
+
+## P6 — Capability registry + brand profiles
+- [x] Registry (manifest+handler): effects, transitions, caption styles,
+      export presets; validator/planner/ffgraph/captions/mux all resolve
+      through it — `tests/test_capabilities.py` (incl. rendered-grayscale proof)
+- [x] Profiles: systemlab / warriors-at-war / seatpass (saliency weights,
+      compaction bands, caption style, export preset)
+
+## P7 — Pro polish
+- [x] DESIGN-SPEC.md (S2 Dark Hi-Tech per ui-library decision engine)
+- [x] Design tokens (globals.css), focus-visible rings, reduced-motion,
+      shimmer skeletons, selection glow, thin scrollbars
+- [x] ⌘K command palette — `apps/studio/tests/palette.spec.ts`
+- [x] Job-outcome toasts (WS-driven, aria-live)
+- [x] Full QA gate: complete server suite + complete Playwright suite (results
+      in the final report)
+
+Remaining known deferrals (each logged in DECISIONS.md with its upgrade path):
+Remotion caption backend, CLIP visual matching in recap, cross-clip xfade
+transitions, LLM judgment pass in clip scoring, live Telegram round-trip
+(needs owner's token).

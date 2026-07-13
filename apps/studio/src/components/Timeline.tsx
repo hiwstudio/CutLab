@@ -228,7 +228,7 @@ export function Timeline({
                       data-clip-id={clip.id}
                       className={`absolute top-1 flex h-[36px] cursor-grab items-stretch overflow-hidden rounded border text-[10px] ${
                         selected
-                          ? "z-10 border-emerald-400 bg-emerald-900/70"
+                          ? "clip-selected z-10 border-transparent bg-[var(--elevated)]"
                           : media
                             ? "border-zinc-600 bg-zinc-800"
                             : "border-indigo-700 bg-indigo-950"

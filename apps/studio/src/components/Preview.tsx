@@ -319,7 +319,7 @@ export function Preview({
         </button>
         <button
           data-testid="render-button"
-          className="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+          className="btn btn-primary px-3 py-1 text-xs"
           disabled={
             !edl || duration === 0 ||
             renderJob?.state === "queued" || renderJob?.state === "running"

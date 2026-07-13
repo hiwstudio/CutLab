@@ -7,8 +7,10 @@ import type { AssetRow, Job } from "@/lib/types";
 import { clipEndMs, isMediaClip } from "@/lib/types";
 import { useEditor } from "@/lib/useEditor";
 import type { Understanding } from "@/lib/types";
+import { CommandPalette, type Command } from "./CommandPalette";
 import { DirectorPanel } from "./DirectorPanel";
 import { MediaLibrary } from "./MediaLibrary";
+import { Toasts } from "./Toasts";
 import { Preview } from "./Preview";
 import { ProposalReview } from "./ProposalReview";
 import { RevisionStrip } from "./RevisionStrip";
@@ -201,6 +203,44 @@ export function Editor({ projectId }: { projectId: string }) {
     if (ok) setInsights(null); // proposal now shows in the review panel
   };
 
+  const hasTimeline = !!ed.edl && ed.edl.project.duration_ms > 0;
+  const commands: Command[] = [
+    { id: "undo", group: "Edit", label: "Undo", hint: "Ctrl+Z",
+      disabled: readOnly, run: ed.undo },
+    { id: "redo", group: "Edit", label: "Redo", hint: "Ctrl+Y",
+      disabled: readOnly, run: ed.redo },
+    { id: "split", group: "Edit", label: "Split selected clip at playhead", hint: "S",
+      disabled: !ed.selection,
+      run: () => {
+        const found = ed.edl?.tracks.flatMap((t) => t.clips)
+          .find((c) => c.id === ed.selection);
+        if (found && found.start_ms < ed.playheadMs && ed.playheadMs < clipEndMs(found)) {
+          ed.applyOps([{ op: "split", clip: found.id, at_ms: ed.playheadMs }]);
+        }
+      } },
+    { id: "delete", group: "Edit", label: "Delete selected clip", hint: "Del",
+      disabled: !ed.selection,
+      run: () => {
+        if (ed.selection) {
+          ed.applyOps([{ op: "remove_clip", clip: ed.selection, ripple: false }]);
+          ed.select(null);
+        }
+      } },
+    { id: "track-video", group: "Timeline", label: "Add video track",
+      run: () => addTrack("video") },
+    { id: "track-audio", group: "Timeline", label: "Add audio track",
+      run: () => addTrack("audio") },
+    { id: "track-caption", group: "Timeline", label: "Add caption track",
+      run: () => addTrack("caption") },
+    { id: "caption", group: "Timeline", label: "Add caption at playhead",
+      run: addCaption },
+    { id: "render", group: "Output", label: "Render (L2 final)",
+      disabled: !hasTimeline, run: onRender },
+    { id: "reframe", group: "AI", label: "Propose: reframe to 9:16 (vertical)",
+      disabled: !hasTimeline,
+      run: () => proposeSmartEdit({ op: "reframe", width: 1080, height: 1920 }) },
+  ];
+
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
       {/* header */}
@@ -211,11 +251,17 @@ export function Editor({ projectId }: { projectId: string }) {
         <h1 className="text-sm font-semibold" data-testid="project-name">
           {ed.edl?.project.name ?? "…"}
         </h1>
-        <span className="text-[10px] text-zinc-600">
+        <span className="font-mono text-[10px] text-zinc-600">
           {ed.edl
             ? `${ed.edl.project.canvas.width}×${ed.edl.project.canvas.height} @${ed.edl.project.canvas.fps}fps · r${ed.headRev}`
             : ""}
         </span>
+        <kbd
+          className="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)]"
+          title="Command palette"
+        >
+          Ctrl K
+        </kbd>
         <div className="ml-auto flex items-center gap-1">
           <button
             data-testid="undo-button"
@@ -369,6 +415,9 @@ export function Editor({ projectId }: { projectId: string }) {
           {assetDrag.asset.src.split("/").pop()}
         </div>
       )}
+
+      <CommandPalette commands={commands} />
+      <Toasts jobs={ed.jobs} />
     </div>
   );
 }

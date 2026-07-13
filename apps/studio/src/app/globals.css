@@ -1,26 +1,141 @@
 @import "tailwindcss";
 
+/* CutLab Studio tokens — S2 Dark Hi-Tech per DESIGN-SPEC.md.
+   Components consume these; no hardcoded colors/durations in TSX. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0b;
+  --surface: #141416;
+  --elevated: #1c1c1f;
+  --foreground: #ededef;
+  --muted: #8b8b92;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-inner: rgba(255, 255, 255, 0.06);
+  --accent: #7c6aef;
+  --accent-strong: #8f7ff2;
+  --accent-soft: rgba(124, 106, 239, 0.16);
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+
+  /* motion tokens (doctrine: 150–300ms, inform not entertain) */
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-geist-sans), Inter, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", Consolas, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- component primitives (S2 recipe) ------------------------------------ */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.btn {
+  border-radius: 6px;
+  font-weight: 600;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+.btn-ghost {
+  background: var(--elevated);
+  color: var(--foreground);
+  border: 1px solid var(--border-inner);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: #232327;
+}
+
+/* Focus is always visible, always accent (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* Shimmering skeleton (S2 signature). */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--surface) 40%,
+    var(--elevated) 50%,
+    var(--surface) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Toast entrance; exits faster than it enters (doctrine). */
+.toast-enter {
+  animation: toast-in var(--dur-base) var(--ease-out);
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+
+/* Selection glow for timeline clips — accent used surgically. */
+.clip-selected {
+  box-shadow:
+    0 0 0 1.5px var(--accent),
+    0 0 12px var(--accent-soft);
+}
+
+/* Calm, thin scrollbars for a dense tool. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #303036 transparent;
+}
+*::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #303036;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

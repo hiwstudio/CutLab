@@ -68,13 +68,34 @@ npx playwright test                         # UI smoke (starts both servers itse
 ## API
 
 Base `http://127.0.0.1:8787/api/v1` — projects, apply (ops plans with
-optimistic locking), undo/redo, revisions, asset upload + ingest jobs, render
-jobs, `/media/{project}/...` file serving, and `WS /ws` for job/revision
-events. See `docs/HANDOFF.md` §A7 for the full surface.
+optimistic locking), undo/redo, revisions + proposals (accept/reject), asset
+upload + ingest, analyze (understanding), compact, recap, render + L1 segment
+previews, director command/answer, `/media/{project}/...` file serving, and
+`WS /ws` for job/revision events. See `docs/HANDOFF.md` §A7 for the core
+surface; later-phase endpoints follow the same conventions.
 
 ## Status
 
-Phase 0. See [PROGRESS.md](PROGRESS.md) for the module checklist and
-[DECISIONS.md](DECISIONS.md) for spec-ambiguity resolutions. Later phases
-(AI director, understanding layer, compaction/recap engines, Remotion caption
-overlays) are specified in the handoff doc and intentionally not built yet.
+**All phases (P0–P7) built and tested.**
+
+- **P0 spine** — EDL + ops/revisions/undo, durable jobs, chunked crash-resuming
+  FFmpeg renders, Studio editor.
+- **P1 understanding** — faster-whisper transcript, scenes, silence, beats,
+  per-profile saliency, as a resumable per-asset job.
+- **P2 AI director** — smart ops (remove_silence, caption_from_transcript,
+  reframe), propose→accept/reject loop, NL commands via pluggable LLM backend
+  (manual file hand-off by default; OpenRouter/Anthropic via env keys).
+- **P3 preview ladder + captions** — L0 live browser compositor, L1 exact
+  segment previews, add_emphasis, captions burned via ASS/libass (4 styles).
+- **P4 compaction** — clip-scoring rubric engine, compact op, durable job,
+  Telegram approval gate (@AlltronzBot; enable with `CUTLAB_TELEGRAM_*` env).
+- **P5 recap** — story outline → original narration (LLM) → Piper TTS → scene
+  matching → recap timeline as one proposal (adapted from recap-engine).
+- **P6 capabilities** — registry (effects/transitions/caption styles/export
+  presets) + brand profiles (systemlab, warriors-at-war, seatpass).
+- **P7 polish** — S2 design tokens (see DESIGN-SPEC.md), ⌘K command palette,
+  job toasts, a11y (focus rings, reduced motion).
+
+See [PROGRESS.md](PROGRESS.md) for the checklist, [DECISIONS.md](DECISIONS.md)
+for ambiguity resolutions and deliberate deferrals, [LESSONS.md](LESSONS.md)
+for hard-won fixes.
