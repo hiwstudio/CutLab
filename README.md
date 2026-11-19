@@ -96,11 +96,9 @@ reviewed timeline.
 
 ## License
 
-This repository is publicly visible, but no project license has been selected.
-Anyone can view and fork it; public visibility does not grant general permission
-to use, modify, or redistribute the code. Choose a license before inviting broad
-public reuse. The bundled HIW Studio and MixFix motion package metadata also say
-`UNLICENSED`.
+CutLab and its bundled, project-authored engine code are licensed under the MIT
+License; see [LICENSE](LICENSE). Third-party dependencies and assets retain their
+own license terms. The bundled font files include their respective OFL notices.
 
 ## Development
 

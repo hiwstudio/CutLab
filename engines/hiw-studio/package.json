@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "HIW Studio - Human Is Weird Animation Engine. A standalone, code-driven 2D puppet/vector animation production system that renders videos from structured scene manifest JSON files.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "dev": "remotion studio src/remotion/index.ts",
     "validate": "tsx src/cli/index.ts validate",
