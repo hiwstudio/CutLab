@@ -96,9 +96,11 @@ reviewed timeline.
 
 ## License
 
-The repository does not yet declare a project license. Select one before public
-distribution so users know what reuse is allowed. The bundled HIW Studio package
-and MixFix motion package also remain marked `UNLICENSED` pending that decision.
+This repository is publicly visible, but no project license has been selected.
+Anyone can view and fork it; public visibility does not grant general permission
+to use, modify, or redistribute the code. Choose a license before inviting broad
+public reuse. The bundled HIW Studio and MixFix motion package metadata also say
+`UNLICENSED`.
 
 ## Development
 

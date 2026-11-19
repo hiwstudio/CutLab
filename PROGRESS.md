@@ -330,5 +330,5 @@ transitions, LLM judgment pass in clip scoring, live Telegram round-trip
       SceneDetect is declared in the bundled engine requirements. Python sources
       compile and PowerShell setup/launcher scripts parse. The full optional
       engine dependency installation was not run on the development checkout.
-- [ ] Choose and add a project/engine license before public distribution; HIW
-      Studio and MixFix motion package metadata currently say `UNLICENSED`.
+- [ ] Choose and add a project/engine license before granting broad public reuse;
+      HIW Studio and MixFix motion package metadata currently say `UNLICENSED`.
