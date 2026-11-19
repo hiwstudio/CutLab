@@ -14,7 +14,7 @@ from cutlab.render.captions import caption_styles
 
 def test_builtins_registered():
     ids = capabilities.known_cap_ids()
-    assert {"grayscale", "blur", "vignette", "fade", "bold-pop",
+    assert {"grayscale", "blur", "vignette", "color-adjust", "sharpen", "fade", "bold-pop",
             "h264-archive", "h264-social"} <= ids
 
 
@@ -23,6 +23,11 @@ def test_effect_filter_instantiation():
     assert capabilities.effect_filter("blur", {}) == "boxblur=8:2"
     assert capabilities.effect_filter("blur", {"radius": 4}) == "boxblur=4:2"
     assert capabilities.effect_filter("nope", {}) is None
+    assert capabilities.effect_filter("video-denoise", {}) == "hqdn3d=4:3:6:4.5"
+    assert capabilities.effect_filter("stabilize", {}) == "deshake=rx=16:ry=16:edge=mirror"
+    assert capabilities.effect_filter("deflicker", {}) == "deflicker=size=5:mode=am"
+    assert capabilities.effect_filter("detail-enhance", {}) == "unsharp=5:5:0.8:5:5:0"
+    assert capabilities.effect_filter("motion-blur", {}) == "tmix=frames=3:weights='1 2 1'"
 
 
 def test_effect_params_must_be_numeric():
@@ -153,6 +158,45 @@ def test_grayscale_effect_renders(db, tmp_path: Path):
          "-vf", "signalstats,metadata=print", "-f", "null", "-"],
         capture_output=True, text=True, timeout=120,
     )
+    uavg = float(re.search(r"signalstats\.UAVG=([0-9.]+)", proc.stderr).group(1))
+    vavg = float(re.search(r"signalstats\.VAVG=([0-9.]+)", proc.stderr).group(1))
+    assert abs(uavg - 128) < 3 and abs(vavg - 128) < 3, (uavg, vavg)
+
+
+@pytest.mark.slow
+def test_color_adjust_saturation_zero_renders(db, tmp_path: Path):
+    """The new adjustment capability must change final pixels, not only the UI."""
+    from cutlab.db import Database
+    from cutlab.edl.engine import Engine
+    from cutlab.jobs.queue import JobQueue
+    from cutlab.jobs.worker import Worker
+    from cutlab.render.runner import render_handler
+    from tests.media_fixtures import make_video
+
+    engine = Engine(db, projects_dir=tmp_path / "projects")
+    pid = engine.create_project("Colour adjust", {"width": 320, "height": 180, "fps": 30})["id"]
+    pdir = engine.projects_dir / pid
+    (pdir / "media").mkdir(parents=True, exist_ok=True)
+    make_video(pdir / "media" / "v.mp4", seconds=1, size="320x180")
+    engine.apply(pid, 0, [
+        {"op": "add_asset", "asset_id": "ast_fx", "kind": "video", "src": "media/v.mp4",
+         "duration_ms": 1000, "width": 320, "height": 180},
+        {"op": "add_track", "kind": "video", "id": "trk_v1"},
+        {"op": "add_clip", "track": "trk_v1", "asset": "ast_fx", "in_ms": 0,
+         "out_ms": 1000, "start_ms": 0, "id": "clp_fx", "effects": [{
+             "cap": "color-adjust", "params": {"brightness": 0, "contrast": 1, "saturation": 0}}]},
+    ])
+    queue = JobQueue(db)
+    job_id = queue.enqueue("render", {"project_id": pid, "rev": engine.get_project(pid)["head_rev"],
+                                        "project_dir": str(pdir), "output": "colour"}, project_id=pid)
+    worker = Worker(db, queue); worker.register("render", render_handler)
+    assert worker.run_one()
+    job = queue.get(job_id)
+    assert job["state"] == "done", job["error"]
+    from cutlab import config
+    proc = subprocess.run([config.FFMPEG, "-hide_banner", "-ss", "0.5", "-i", job["artifacts"]["mux"]["file"],
+                           "-frames:v", "1", "-vf", "signalstats,metadata=print", "-f", "null", "-"],
+                          capture_output=True, text=True, timeout=120)
     uavg = float(re.search(r"signalstats\.UAVG=([0-9.]+)", proc.stderr).group(1))
     vavg = float(re.search(r"signalstats\.VAVG=([0-9.]+)", proc.stderr).group(1))
     assert abs(uavg - 128) < 3 and abs(vavg - 128) < 3, (uavg, vavg)

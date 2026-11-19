@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MixFix Review</title>
+<style>
+:root{
+  --bg:#0b0c0e; --stage:#060708; --panel:#14161a; --panel2:#1b1e24;
+  --border:#272b32; --border2:#31363f; --text:#e9ebee; --muted:#8a919c;
+  --accent:#f0a63c; --accent-dim:#8a5f22;
+  --ok:#43c383; --bad:#e0564f; --flag:#e8c24a; --pend:#59616c;
+  --mono:"Cascadia Mono","Consolas",monospace;
+}
+*{box-sizing:border-box; margin:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Bahnschrift","Segoe UI",system-ui,sans-serif;
+  font-size:13.5px; display:grid; grid-template-rows:48px minmax(0,1fr) auto;
+  overflow:hidden; user-select:none;
+}
+button{font-family:inherit; font-size:12.5px; color:var(--text);
+  background:var(--panel2); border:1px solid var(--border2); border-radius:4px;
+  padding:6px 12px; cursor:pointer; transition:background .12s,border-color .12s}
+button:hover{background:#232830; border-color:#3d434e}
+button:disabled{opacity:.4; cursor:default}
+button.primary{background:var(--accent); border-color:var(--accent); color:#191309; font-weight:600}
+button.primary:hover{background:#f7b355}
+button.danger:hover{border-color:var(--bad); color:var(--bad)}
+textarea,input{font-family:inherit; font-size:13px; color:var(--text);
+  background:var(--stage); border:1px solid var(--border2); border-radius:4px; padding:7px 9px}
+textarea:focus,input:focus{outline:none; border-color:var(--accent-dim)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#2c313a;border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---- top bar ---- */
+#topbar{display:flex; align-items:center; gap:14px; padding:0 14px;
+  background:var(--panel); border-bottom:1px solid var(--border)}
+#logo{font-weight:700; letter-spacing:.14em; font-size:13px}
+#logo b{color:var(--accent)}
+#projname{color:var(--muted); font-size:13px; letter-spacing:.02em}
+#progress{margin-left:auto; display:flex; align-items:center; gap:10px;
+  font-size:12px; color:var(--muted)}
+#progress .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:1px}
+#submitbtn{margin-left:6px}
+
+/* ---- main ---- */
+/* minmax(0,1fr), not 1fr: an auto row grows to its tallest child, and the
+   inspector's natural height is its whole scroll length. That pushed the stage
+   past the viewport — bottom of the video and the transport bar cut off, and
+   nothing could scroll because the body is deliberately overflow:hidden. */
+#main{display:grid; grid-template-columns:1fr 356px;
+  grid-template-rows:minmax(0,1fr); min-height:0}
+#stagewrap{display:flex; flex-direction:column; background:var(--stage);
+  min-width:0; min-height:0}
+#stage{flex:1; display:flex; align-items:center; justify-content:center; min-height:0; position:relative}
+#player{max-width:100%; max-height:100%; background:#000; outline:none}
+#novideo{color:var(--muted); font-size:14px; letter-spacing:.05em}
+#transport{display:flex; align-items:center; gap:10px; padding:8px 14px;
+  background:var(--panel); border-top:1px solid var(--border)}
+#transport .tc{font-family:var(--mono); font-size:13px; color:var(--accent);
+  letter-spacing:.03em; font-variant-numeric:tabular-nums}
+#transport .tc .tot{color:var(--muted)}
+#transport .spacer{flex:1}
+#sceneonly.active{border-color:var(--accent); color:var(--accent)}
+.kindbadge{display:inline-block;font-size:10px;letter-spacing:.09em;padding:2px 7px;
+  border-radius:4px;margin:2px 0 6px;background:rgba(255,255,255,.09)}
+.kindbadge[data-kind=video]{background:rgba(90,160,255,.18); color:#8fc0ff}
+.kindbadge[data-kind=generate]{background:rgba(190,120,255,.18); color:#cfa4ff}
+.kindbadge[data-kind=image]{background:rgba(255,190,90,.18); color:#ffd18f}
+.kindbadge[data-kind=main]{background:rgba(120,180,255,.16); color:#a9cbff}
+.cand{border:1px solid rgba(255,255,255,.10);border-radius:7px;padding:8px;margin:6px 0}
+.cand.current{border-color:var(--accent)}
+.cand-t{font-size:12px;line-height:1.35}
+.cand-m{font-size:11px;opacity:.62;margin-top:3px}
+.cand-q{font-size:11px;opacity:.5;margin-top:4px;font-style:italic}
+.muted{font-size:11px;opacity:.6;margin:4px 0}
+.imgstrip{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.imgstrip img{width:104px;border-radius:5px;border:1px solid rgba(255,255,255,.12)}
+
+/* ---- inspector ---- */
+#inspector{background:var(--panel); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; min-height:0}
+#tabs{display:flex; border-bottom:1px solid var(--border)}
+#tabs button{flex:1; background:none; border:none; border-radius:0; padding:11px 0;
+  color:var(--muted); font-size:11.5px; letter-spacing:.16em; font-weight:600;
+  border-bottom:2px solid transparent}
+#tabs button.active{color:var(--text); border-bottom-color:var(--accent)}
+.pane{flex:1; overflow-y:auto; padding:14px; display:none; user-select:text}
+.pane.active{display:block}
+.sect{margin-bottom:16px}
+.sect h4{font-size:10.5px; letter-spacing:.16em; color:var(--muted);
+  font-weight:600; margin-bottom:7px; text-transform:uppercase}
+#sc-head{display:flex; align-items:baseline; gap:10px; margin-bottom:4px}
+#sc-num{font-size:19px; font-weight:700; letter-spacing:.03em}
+#sc-tc{font-family:var(--mono); font-size:11.5px; color:var(--muted)}
+.pill{display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.1em;
+  padding:3px 9px; border-radius:3px; text-transform:uppercase}
+.pill.approved{background:rgba(67,195,131,.16); color:var(--ok)}
+.pill.rejected{background:rgba(224,86,79,.16); color:var(--bad)}
+.pill.pending{background:rgba(89,97,108,.25); color:#aab1bb}
+.pill.flagged{background:rgba(232,194,74,.16); color:var(--flag)}
+.quote{color:#c6cad0; font-size:13px; line-height:1.55; border-left:2px solid var(--border2);
+  padding-left:10px}
+.kv{display:grid; grid-template-columns:86px 1fr; gap:4px 10px; font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{overflow-wrap:anywhere}
+.btngrid{display:grid; grid-template-columns:1fr 1fr; gap:7px}
+.btngrid .wide{grid-column:1/-1}
+.trimrow{display:flex; gap:7px; align-items:center}
+.trimrow input{width:76px; font-family:var(--mono); font-size:12px}
+.altbtn{display:block; width:100%; text-align:left; margin-bottom:6px; font-size:12px;
+  line-height:1.35; padding:7px 10px}
+.altbtn small{color:var(--muted)}
+.slot{font-size:12.5px; color:var(--muted); margin:2px 0 8px}
+.slot b{color:var(--text)}
+.cand{border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-bottom:8px;
+  background:var(--panel2)}
+.cand .t{font-size:12.5px; line-height:1.35; margin-bottom:3px}
+.cand .m{font-size:11.5px; color:var(--muted); font-family:var(--mono)}
+.cand .row{display:flex; gap:6px; align-items:center; margin-top:7px; flex-wrap:wrap}
+.cand .trimrow{margin-top:7px}
+.cand .trimrow input{width:70px; padding:3px 6px}
+.cand .len{font-size:11px; color:var(--muted); font-family:var(--mono)}
+.cand a{color:var(--accent); font-size:11.5px}
+.cand button{font-size:11.5px; padding:4px 9px}
+.cand.live{border-color:var(--accent)}
+.ytwrap{margin-top:8px; aspect-ratio:16/9; width:100%}
+.ytwrap iframe{width:100%; height:100%; border:0; border-radius:5px}
+.comment{background:var(--panel2); border:1px solid var(--border); border-radius:5px;
+  padding:8px 10px; margin-bottom:7px; font-size:12.5px; line-height:1.45}
+.comment .t{font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:3px}
+.crow{display:flex; gap:7px; margin-top:8px}
+.crow textarea{flex:1; resize:vertical; min-height:38px}
+.hist{font-size:11.5px; color:var(--muted); line-height:1.7; font-family:var(--mono)}
+.metrics{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.metric{background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:9px 11px}
+.metric .v{font-size:17px; font-weight:700; font-family:var(--mono)}
+.metric .l{font-size:10.5px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-top:2px}
+
+/* ---- timeline (two tracks: main video, cut scenes) ----
+   Scenes are positioned ABSOLUTELY by start_ms. The old strip flexed each scene
+   to duration/total, which tiles them edge to edge — correct for MIX, where
+   scenes cover the whole runtime, but a lie for FIX/ASSEMBLY, where a handful of
+   cutaways cover ~4% of it and the rest is the main video playing. A cutaway at
+   02:09 was drawn at 00:00. */
+#timeline{background:var(--panel); border-top:1px solid var(--border); padding:8px 14px 12px}
+#tlhead{display:flex; align-items:center; gap:10px; margin-bottom:6px}
+#tlhead .ttl{font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--muted); font-weight:700}
+#zoomctl{margin-left:auto; display:flex; gap:4px}
+#zoomctl button{padding:3px 9px; font-size:11px; font-family:var(--mono)}
+#zoomctl button.active{border-color:var(--accent); color:var(--accent)}
+#tlbody{display:grid; grid-template-columns:104px 1fr; column-gap:9px}
+#tllabels{display:grid; grid-template-rows:16px 40px 52px; row-gap:5px; align-items:center}
+#tlscroll{overflow-x:auto; overflow-y:hidden}
+/* width is a multiple of the scroller's own width, so `left:%` on a block keeps
+   meaning "this fraction of the runtime" at every zoom level */
+#tlinner{position:relative; display:grid; grid-template-rows:16px 40px 52px;
+  row-gap:5px; width:calc(var(--z,1) * 100%)}
+#ruler{position:relative; height:16px; font-family:var(--mono);
+  font-size:9.5px; color:var(--muted)}
+#ruler .tick{position:absolute; top:0; border-left:1px solid var(--border2);
+  height:5px; padding-left:3px; line-height:16px}
+.tracklabel{font-size:9.5px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--muted); font-weight:700; text-align:right; line-height:1.25}
+.tracklabel .cnt{display:block; font-family:var(--mono); font-size:9px;
+  color:var(--border2); letter-spacing:0; text-transform:none}
+.trackbody{position:relative; border-radius:5px; background:var(--stage);
+  border:1px solid var(--border); overflow:hidden}
+#maintrack{height:40px; cursor:pointer}
+#cuttrack{height:52px}
+.phline{position:absolute; top:0; bottom:0; width:0; z-index:6; pointer-events:none;
+  border-left:2px solid var(--accent); box-shadow:0 0 6px rgba(240,166,60,.7)}
+
+/* main video bar — one continuous clip under everything */
+.mainclip{position:absolute; inset:0; background:linear-gradient(180deg,#243040,#1a2230);
+  display:flex; align-items:center; gap:8px; padding:0 10px; overflow:hidden}
+.mainclip .nm{font-size:11px; color:#c9d4e2; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis}
+.mainclip .len{font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-left:auto}
+#maintrack.sel{outline:2px solid var(--accent); outline-offset:-2px}
+#maintrack:hover .mainclip{filter:brightness(1.18)}
+/* where a cutaway replaces the picture, the main video is dimmed through it */
+.mainclip .covered{position:absolute; top:0; bottom:0;
+  background:repeating-linear-gradient(45deg,rgba(0,0,0,.5),rgba(0,0,0,.5) 5px,
+    rgba(0,0,0,.28) 5px,rgba(0,0,0,.28) 10px)}
+
+/* cut scenes */
+.seg{position:absolute; top:0; bottom:0; background-size:cover; background-position:center;
+  cursor:pointer; border-radius:3px; overflow:hidden;
+  border:1px solid rgba(0,0,0,.7); transition:filter .12s;
+  /* True scale, always. A 44px floor made every block legible and made adjacent
+     cutaways OVERLAP and hide each other — trading a position lie for an
+     occlusion lie. Real editors solve this with zoom, so the block stays honest
+     and the ZOOM control buys legibility. */
+  min-width:3px}
+.seg:hover{filter:brightness(1.3)}
+.seg.sel{outline:2px solid var(--accent); outline-offset:1px; z-index:3}
+.seg.playing{box-shadow:0 0 0 2px var(--accent), 0 0 12px rgba(240,166,60,.55); z-index:2}
+.seg::before{content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(0,0,0,.5) 0%,transparent 40%,transparent 55%,rgba(0,0,0,.7) 100%)}
+.seg .stripe{position:absolute; top:0; left:0; right:0; height:3px}
+.seg .atype{position:absolute; top:4px; left:5px; font-size:8.5px; font-weight:700;
+  font-family:var(--mono); letter-spacing:.06em; padding:1px 4px; border-radius:3px;
+  color:#08090b}
+.seg .num{position:absolute; bottom:3px; left:5px; font-size:9px; font-weight:700;
+  font-family:var(--mono); color:#fff; text-shadow:0 1px 2px #000}
+.seg .dur{position:absolute; bottom:3px; right:5px; font-family:var(--mono);
+  font-size:9px; color:#dfe3e8; text-shadow:0 1px 2px #000}
+.seg .flagdot{position:absolute; top:3px; right:4px; font-size:9px}
+.seg.novis{background:repeating-linear-gradient(45deg,#15171b,#15171b 7px,#20242b 7px,#20242b 14px)}
+.seg.narrow .dur,.seg.narrow .num{display:none}   /* badge survives longest */
+.seg.tiny .atype{display:none}
+.seg.tiny{border-color:rgba(255,255,255,.35)}
+/* legend */
+#tllegend{display:flex; gap:12px; flex-wrap:wrap}
+#tllegend span{font-size:9.5px; color:var(--muted); display:flex; align-items:center; gap:4px}
+#tllegend i{width:9px; height:9px; border-radius:2px; display:inline-block}
+
+/* ---- modal ---- */
+#modalback{position:fixed; inset:0; background:rgba(4,5,6,.72); display:none;
+  align-items:center; justify-content:center; z-index:50; backdrop-filter:blur(3px)}
+#modalback.open{display:flex}
+#modal{width:430px; background:var(--panel); border:1px solid var(--border2);
+  border-radius:8px; padding:20px}
+#modal h3{font-size:15px; letter-spacing:.06em; margin-bottom:12px}
+#modal .sum{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px}
+#modal .warn{color:var(--flag); font-size:12.5px; margin-bottom:12px; line-height:1.5}
+#modal .row{display:flex; gap:8px; justify-content:flex-end}
+#toast{position:fixed; bottom:110px; left:50%; transform:translateX(-50%);
+  background:var(--panel2); border:1px solid var(--border2); border-radius:6px;
+  padding:9px 16px; font-size:12.5px; opacity:0; transition:opacity .2s; z-index:60;
+  pointer-events:none; max-width:70%}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">MIX<b>FIX</b> REVIEW</div>
+  <div id="projname"></div>
+  <div id="progress"></div>
+  <button id="submitbtn" class="primary">Submit review</button>
+</div>
+
+<div id="main">
+  <div id="stagewrap">
+    <div id="stage">
+      <video id="player" controls preload="metadata"></video>
+      <div id="novideo" style="display:none">No preview video yet — run the pipeline once, then reopen the review board.</div>
+    </div>
+    <div id="transport">
+      <button id="prevsc" title="Previous scene (←)">⏮ Scene</button>
+      <button id="playsc" title="Play selected scene only">▶ Play scene</button>
+      <button id="nextsc" title="Next scene (→)">Scene ⏭</button>
+      <button id="sceneonly" title="Pause at end of selected scene">Scene loop: off</button>
+      <div class="spacer"></div>
+      <div class="tc"><span id="tc-cur">00:00.0</span> <span class="tot">/ <span id="tc-tot">00:00.0</span></span></div>
+    </div>
+  </div>
+
+  <div id="inspector">
+    <div id="tabs">
+      <button data-pane="scenepane" class="active">SCENE</button>
+      <button data-pane="projpane">PROJECT</button>
+    </div>
+    <div id="scenepane" class="pane active"></div>
+    <div id="projpane" class="pane"></div>
+  </div>
+</div>
+
+<div id="timeline">
+  <div id="tlhead">
+    <span class="ttl">Timeline</span>
+    <span id="tllegend"></span>
+    <span id="zoomctl">
+      <button data-z="1" class="active">Fit</button>
+      <button data-z="4">4&times;</button>
+      <button data-z="16">16&times;</button>
+      <button data-z="64">64&times;</button>
+    </span>
+  </div>
+  <div id="tlbody">
+    <div id="tllabels">
+      <div></div>
+      <div class="tracklabel" id="mainlabel">Main video</div>
+      <div class="tracklabel" id="cutlabel">Cut scenes</div>
+    </div>
+    <div id="tlscroll">
+      <div id="tlinner">
+        <div id="ruler"></div>
+        <div class="trackbody" id="maintrack"></div>
+        <div class="trackbody" id="cuttrack"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modalback"><div id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+let S = {tl:null, review:null, sel:null, sceneOnly:false, project:"", mode:"mix", wb:{}};
+const $ = id => document.getElementById(id);
+const player = $("player");
+
+/* ---------- utils ---------- */
+function tc(ms){
+  const t = Math.max(0, ms/1000), m = Math.floor(t/60), s = t - m*60;
+  return String(m).padStart(2,"0") + ":" + s.toFixed(1).padStart(4,"0");
+}
+/* "1:10.5" | "70.5" | "1:02:03" -> ms. NaN when unparseable, so callers can refuse. */
+function parseTc(str){
+  const s = String(str).trim();
+  if (!s) return NaN;
+  const parts = s.split(":");
+  if (parts.some(p => p === "" || isNaN(Number(p)))) return NaN;
+  const secs = parts.reduce((acc, p) => acc * 60 + Number(p), 0);
+  return Math.round(secs * 1000);
+}
+function ytId(url){
+  const m = String(url || "").match(/(?:v=|be\/|shorts\/|embed\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+async function api(path, body){
+  const r = await fetch(path, {method:"POST", body:JSON.stringify(body||{})});
+  const j = await r.json();
+  if (j.error){ toast("⚠ " + j.error); throw new Error(j.error); }
+  return j;
+}
+function wb(sid){ return (S.wb||{})[sid] || {}; }
+/* MIX writes its own narration; every other mode plays the source's audio, so
+   calling the transcript "Narration" there is simply wrong. */
+function saidLabel(){ return S.mode === "mix" ? "Narration" : "What is said here"; }
+function slotLabel(){ return S.mode === "mix" ? "Reference slot" : "Cutaway slot"; }
+const KIND_LABEL = {video:"SOURCED FOOTAGE", image:"STILL", generate:"GENERATED"};
+
+function sceneReview(sid){
+  return (S.review.scenes||{})[sid] || {comments:[],flag:null,history:[]};
+}
+function status(sc){
+  const f = sceneReview(sc.id).flag;
+  if (f) return "flagged";
+  return sc.review;
+}
+const statusColor = {approved:"var(--ok)", rejected:"var(--bad)",
+                     flagged:"var(--flag)", pending:"var(--pend)"};
+
+/* ---------- load ---------- */
+async function loadState(keepSel){
+  const st = await (await fetch("/state")).json();
+  S.tl = st.timeline; S.review = st.review; S.project = st.project;
+  S.mode = st.mode || "mix"; S.wb = st.workbench || {};
+  if (!keepSel || !S.sel
+      || (S.sel !== MAIN && !S.tl.scenes.find(s => s.id === S.sel)))
+    S.sel = S.tl.scenes[0] ? S.tl.scenes[0].id : MAIN;
+  $("projname").textContent = st.project;
+  if (!st.video_ready){ player.style.display="none"; $("novideo").style.display=""; }
+  else if (!player.src) player.src = "/video";
+  renderAll();
+}
+
+/* ---------- timeline: two tracks ----------
+   ASSET is the registry the badges read. Only the kinds the engine can actually
+   produce today are listed — visual_type is validated as video|image|generate,
+   and a sourced clip is distinguished from a hand-placed one by whether it
+   carries a source URL. Adding a kind here is the whole change when the engine
+   grows one (motion graphics, animation): give it a colour and a short code. */
+const ASSET = {
+  source_footage:{short:"SRC",   label:"Source footage",    color:"#4c9aff"},
+  local_footage: {short:"LOCAL", label:"Local footage",     color:"#8d9aa8"},
+  image:         {short:"IMG",   label:"Image",             color:"#3fb27f"},
+  generated:     {short:"GEN",   label:"Generated stills",  color:"#a97bff"},
+  empty:         {short:"—",     label:"No asset yet",      color:"#565c65"},
+};
+const MAIN = "__main__";               // selection id for the main-video track
+
+function assetKind(sc){
+  if (!sc.visual) return "empty";
+  const t = sc.visual_type || wb(sc.id).visual_type;
+  if (t === "generate") return "generated";
+  if (t === "image" || sc.visual.kind === "image") return "image";
+  const src = sc.visual.source;
+  return (src && src.url) ? "source_footage" : "local_footage";
+}
+
+function renderStrip(){
+  const total = S.tl.total_ms || 1;
+  const mainT = $("maintrack"), cutT = $("cuttrack");
+  mainT.innerHTML = ""; cutT.innerHTML = "";
+  mainT.classList.toggle("sel", S.sel === MAIN);
+
+  // --- row 1: the main video, one continuous clip, with the covered spans marked
+  const clip = el("div","mainclip");
+  clip.appendChild(el("div","nm", mainName()));
+  clip.appendChild(el("div","len", tc(total)));
+  S.tl.scenes.filter(s => s.visual).forEach(sc => {
+    const c = el("div","covered");
+    c.style.left  = (100 * sc.start_ms / total) + "%";
+    c.style.width = (100 * sc.duration_ms / total) + "%";
+    clip.appendChild(c);
+  });
+  mainT.appendChild(clip);
+  mainT.title = "Main video — " + mainName() + " · click to edit its settings";
+  mainT.onclick = () => select(MAIN);
+  mainT.appendChild(el("div","phline")).style.left = "0%";
+
+  // --- row 2: cut scenes, placed where they actually sit
+  S.tl.scenes.forEach((sc, i) => {
+    const kind = assetKind(sc), a = ASSET[kind];
+    const wpct = 100 * sc.duration_ms / total;
+    const px = wpct / 100 * trackPx();
+    const seg = el("div", "seg" + (sc.id === S.sel ? " sel":"")
+                        + (sc.visual ? "":" novis")
+                        + (sc.id === S.playingId ? " playing":"")
+                        + (px < 34 ? " narrow":"") + (px < 16 ? " tiny":""));
+    seg.style.left = (100 * sc.start_ms / total) + "%";
+    seg.style.width = wpct + "%";
+    if (sc.visual && sc.visual.thumb)
+      seg.style.backgroundImage = `url(/thumb/${sc.id})`;
+    const stripe = el("div","stripe");
+    stripe.style.background = statusColor[status(sc)];
+    seg.appendChild(stripe);
+    const badge = el("div","atype", a.short);
+    badge.style.background = a.color;
+    seg.appendChild(badge);
+    seg.appendChild(el("div","num", String(i+1).padStart(2,"0")));
+    seg.appendChild(el("div","dur", (sc.duration_ms/1000).toFixed(1)+"s"));
+    if (sceneReview(sc.id).flag) seg.appendChild(el("div","flagdot","⚑"));
+    seg.title = `Scene ${i+1} · ${a.label} · ${tc(sc.start_ms)}–${tc(sc.end_ms)}`
+              + ` · ${(sc.duration_ms/1000).toFixed(1)}s`;
+    seg.onclick = e => { e.stopPropagation();
+      select(sc.id); player.currentTime = sc.start_ms/1000; };
+    cutT.appendChild(seg);
+  });
+  cutT.appendChild(el("div","phline")).style.left = "0%";
+
+  const covered = S.tl.scenes.filter(s=>s.visual)
+                    .reduce((n,s)=>n+s.duration_ms, 0);
+  $("cutlabel").innerHTML = "Cut scenes<span class='cnt'>" + S.tl.scenes.length
+    + " · " + (100*covered/total).toFixed(1) + "% covered</span>";
+  $("mainlabel").innerHTML = "Main video<span class='cnt'>" + tc(total) + "</span>";
+  renderLegend();
+  renderRuler();
+  $("tlinner").style.setProperty("--z", S.zoom || 1);
+  document.querySelectorAll("#zoomctl button").forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.z) === (S.zoom || 1)));
+  movePlayhead(player.currentTime * 1000);
+}
+
+function mainName(){
+  return S.mode === "mix" ? "Narration bed (assembled scenes)"
+                          : (S.tl.source_name || "source.mp4");
+}
+function renderLegend(){
+  const used = new Set(S.tl.scenes.map(assetKind));
+  const box = $("tllegend"); box.innerHTML = "";
+  [...used].forEach(k => {
+    const s = el("span"); const i = el("i");
+    i.style.background = ASSET[k].color; s.appendChild(i);
+    s.appendChild(document.createTextNode(ASSET[k].label));
+    box.appendChild(s);
+  });
+}
+function movePlayhead(ms){
+  const f = Math.min(1, ms / (S.tl.total_ms||1));
+  document.querySelectorAll(".phline").forEach(p => p.style.left = (100*f) + "%");
+  // keep the head in view when zoomed in, or it walks off and the timeline
+  // silently stops describing what is playing
+  const sc = $("tlscroll"); if (!sc || (S.zoom||1) === 1) return;
+  const x = f * sc.scrollWidth;
+  if (x < sc.scrollLeft + 40 || x > sc.scrollLeft + sc.clientWidth - 40)
+    sc.scrollLeft = Math.max(0, x - sc.clientWidth/2);
+}
+function trackPx(){
+  const sc = $("tlscroll");
+  return (sc ? sc.clientWidth : 700) * (S.zoom || 1);
+}
+function setZoom(z){
+  S.zoom = z;
+  $("tlinner").style.setProperty("--z", z);
+  document.querySelectorAll("#zoomctl button").forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.z) === z));
+  renderStrip();
+  centreOn(anchorMs());
+}
+/* Zooming used to land at scroll 0. On a sparse FIX timeline that is dead space —
+   the first cutaway can be minutes in — so zooming in showed empty track and the
+   thing you were working on went off-screen. Zoom around what you are looking at:
+   the selected scene, else the playhead. */
+function anchorMs(){
+  const sc = S.tl.scenes.find(s => s.id === S.sel);
+  if (sc) return sc.start_ms + sc.duration_ms/2;
+  return player.currentTime * 1000;
+}
+function centreOn(ms){
+  const sc = $("tlscroll"); if (!sc) return;
+  const f = Math.min(1, Math.max(0, ms / (S.tl.total_ms||1)));
+  sc.scrollLeft = Math.max(0, f * sc.scrollWidth - sc.clientWidth/2);
+}
+document.querySelectorAll("#zoomctl button").forEach(b =>
+  b.onclick = () => setZoom(Number(b.dataset.z)));
+// ?z=16 opens at that zoom, so a particular view of the timeline can be linked
+const _z = Number(new URLSearchParams(location.search).get("z"));
+function renderRuler(){
+  const r = $("ruler"); r.innerHTML = "";
+  const total = S.tl.total_ms;
+  // ticks must densify with zoom or a zoomed view shows one label and reads as
+  // unlabelled space; aim for a tick roughly every 110px at the current scale
+  const perPx = total / Math.max(1, trackPx());
+  const want = perPx * 110;
+  const step = [1000,2000,5000,10000,15000,30000,60000,120000,300000,600000]
+                 .find(v => v >= want) || 600000;
+  for (let t = 0; t <= total; t += step){
+    const tick = el("div","tick", tc(t));
+    tick.style.left = (100 * t / total) + "%";
+    r.appendChild(tick);
+  }
+}
+
+/* ---------- inspector: scene ---------- */
+/* The main-video track owns the stretches no cutaway covers, so selecting it has
+   to answer a different question from a scene: what is the base, how much of it
+   is still untouched, and where are the cutaways. */
+function renderMainPane(pane){
+  const total = S.tl.total_ms || 1;
+  const withVis = S.tl.scenes.filter(s => s.visual);
+  const covered = withVis.reduce((n,s) => n + s.duration_ms, 0);
+
+  const head = el("div"); head.id = "sc-head";
+  head.appendChild(el("span","", "Main video")).id = "sc-num";
+  head.appendChild(el("span","", tc(0) + " – " + tc(total))).id = "sc-tc";
+  pane.appendChild(head);
+  const badge = el("span","kindbadge", S.mode === "mix" ? "ASSEMBLED" : "BASE VIDEO");
+  badge.dataset.kind = "main"; pane.appendChild(badge);
+  pane.appendChild(el("div","slot", "Runtime: " + (total/1000).toFixed(1) + "s"));
+
+  const s1 = el("div","sect"); s1.appendChild(el("h4","","Source"));
+  const kv = el("dl","kv");
+  const add = (k,v) => { kv.appendChild(el("dt","",k)); kv.appendChild(el("dd","",v)); };
+  add("File", mainName());
+  add("Runtime", tc(total));
+  add("Cut scenes", String(S.tl.scenes.length));
+  add("Replaced", tc(covered) + "  (" + (100*covered/total).toFixed(1) + "%)");
+  add("Untouched", tc(total-covered) + "  (" + (100*(total-covered)/total).toFixed(1) + "%)");
+  s1.appendChild(kv); pane.appendChild(s1);
+
+  const s2 = el("div","sect"); s2.appendChild(el("h4","","Cutaways over this video"));
+  S.tl.scenes.forEach((sc,i) => {
+    const a = ASSET[assetKind(sc)];
+    const row = el("div","cand");
+    const dot = el("span","", "  " + a.short + "  ");
+    dot.style.cssText = "background:"+a.color+";color:#08090b;border-radius:3px;"
+      + "font:700 9px var(--mono);padding:1px 4px;margin-right:7px";
+    row.appendChild(dot);
+    row.appendChild(document.createTextNode(
+      String(i+1).padStart(2,"0") + " · " + tc(sc.start_ms) + " · "
+      + (sc.duration_ms/1000).toFixed(1) + "s · " + a.label));
+    row.style.cursor = "pointer";
+    row.onclick = () => { select(sc.id); player.currentTime = sc.start_ms/1000; };
+    s2.appendChild(row);
+  });
+  if (!S.tl.scenes.length) s2.appendChild(el("div","", "No cut scenes planned."));
+  pane.appendChild(s2);
+}
+
+function renderScene(){
+  const pane = $("scenepane"); pane.innerHTML = "";
+  if (S.sel === MAIN){ renderMainPane(pane); return; }
+  const sc = S.tl.scenes.find(s => s.id === S.sel);
+  if (!sc){ pane.appendChild(el("div","", "No scene selected.")); return; }
+  const i = S.tl.scenes.indexOf(sc), sr = sceneReview(sc.id);
+
+  const head = el("div"); head.id = "sc-head";
+  head.appendChild(el("span","", "Scene " + String(i+1).padStart(2,"0"))).id = "sc-num";
+  head.appendChild(el("span","", tc(sc.start_ms) + " – " + tc(sc.end_ms))).id = "sc-tc";
+  pane.appendChild(head);
+  // the slot length is the number you need when choosing a window by hand
+  const w = wb(sc.id);
+  if (w.visual_type){
+    const badge = el("span","kindbadge", KIND_LABEL[w.visual_type] || w.visual_type);
+    badge.dataset.kind = w.visual_type;
+    pane.appendChild(badge);
+  }
+  pane.appendChild(el("div","slot",
+    slotLabel() + ": " + (sc.duration_ms/1000).toFixed(1) + "s"));
+  const st = status(sc);
+  pane.appendChild(el("span","pill " + st, st));
+
+  const narr = el("div","sect"); narr.appendChild(el("h4","",saidLabel()));
+  narr.appendChild(el("div","quote", sc.narration));
+  pane.appendChild(narr);
+
+  const vis = el("div","sect"); vis.appendChild(el("h4","","Visual"));
+  const kv = el("dl","kv");
+  const add = (k,v) => { kv.appendChild(el("dt","",k)); kv.appendChild(el("dd","",v)); };
+  add("Intent", sc.visual_intent);
+  const src = sc.visual && sc.visual.source;
+  if (sc.visual){
+    add("Source", (src && src.title) || (sc.visual.path||"").split(/[\\/]/).pop());
+    if (src && src.channel) add("Channel", src.channel + (src.manual ? " · hand-picked" : ""));
+    if (src && src.clip_start_ms != null)
+      add("Window", `${tc(src.clip_start_ms)} – ${tc(src.clip_end_ms)}`);
+    if (sc.visual.confidence != null) add("Confidence", sc.visual.confidence + "%");
+    add("Trim", `${tc(sc.visual.trim_in_ms)} – ${tc(sc.visual.trim_out_ms)}`);
+  } else add("Source", "— no visual —");
+  vis.appendChild(kv); pane.appendChild(vis);
+  if (src && src.url){                      // watch what is currently in the cut
+    const row = el("div","row");
+    const a = el("a","","open current source ↗");
+    a.href = src.url; a.target = "_blank"; a.rel = "noopener";
+    row.appendChild(a); vis.appendChild(row);
+  }
+
+  /* ---- per-kind workbench: this is what you actually act on ---- */
+  if (w.visual_type === "video"){
+    const cs = el("div","sect");
+    cs.appendChild(el("h4","","Sources (" + (w.candidates||[]).length + ")"));
+    if (w.queries && w.queries.length)
+      cs.appendChild(el("div","muted","searched: " + w.queries.join(" · ")));
+    if (!(w.candidates||[]).length){
+      cs.appendChild(el("div","muted",
+        "No candidates yet — run the pipeline, or reject to re-search."));
+    }
+    (w.candidates||[]).forEach((c, ci) => {
+      const row = el("div","cand" + (ci === w.candidate_idx ? " current" : ""));
+      const t = el("div","cand-t", c.title || c.video_id);
+      row.appendChild(t);
+      const meta = [c.channel, c.score != null ? "score " + c.score : null,
+                    c.clip_start_ms != null
+                      ? tc(c.clip_start_ms) + "–" + tc(c.clip_end_ms) : null]
+                   .filter(Boolean).join(" · ");
+      row.appendChild(el("div","cand-m", meta));
+      if (c.matched_text) row.appendChild(el("div","cand-q", c.matched_text));
+      const bar = el("div","row");
+      const use = el("button","", ci === w.candidate_idx ? "in use" : "Use this");
+      use.disabled = ci === w.candidate_idx;
+      use.onclick = async () => {
+        await api("/edit",{action:"swap_alternative", scene_id:sc.id,
+                           candidate_idx:ci});
+        toast("Source swapped — rerun the pipeline to fetch it."); refresh(); };
+      bar.appendChild(use);
+      if (c.url){
+        const a = el("a","","watch ↗"); a.href = c.url; a.target = "_blank";
+        a.rel = "noopener"; bar.appendChild(a);
+      }
+      row.appendChild(bar);
+      cs.appendChild(row);
+    });
+    pane.appendChild(cs);
+  } else if (w.visual_type === "generate" || w.visual_type === "image"){
+    const gs = el("div","sect");
+    gs.appendChild(el("h4","","Generated stills"));
+    (w.prompts||[]).forEach((pr,pi) =>
+      gs.appendChild(el("div","cand-q","#" + (pi+1) + " " + pr)));
+    const strip = el("div","imgstrip");
+    (w.images||[]).forEach(name => {
+      const im = document.createElement("img");
+      im.src = "/img/" + sc.id + "/" + name; im.title = name;
+      strip.appendChild(im);
+    });
+    if (!(w.images||[]).length)
+      gs.appendChild(el("div","muted",
+        "No stills dropped yet — run the job in imagery/prompts, then drop them "
+        + "into imagery/incoming/" + sc.id + "/"));
+    else gs.appendChild(strip);
+    pane.appendChild(gs);
+  }
+
+  /* actions */
+  const act = el("div","sect"); act.appendChild(el("h4","","Actions"));
+  const grid = el("div","btngrid");
+  const btn = (label, cls, fn, dis) => {
+    const b = el("button", cls, label); b.onclick = fn; b.disabled = !!dis;
+    grid.appendChild(b); return b;
+  };
+  btn("✓ Approve", "", async () => {
+    await api("/edit",{action:"approve_clip", scene_id:sc.id}); refresh(); });
+  btn("✗ Reject → next", "danger", async () => {
+    await api("/edit",{action:"reject_clip", scene_id:sc.id});
+    toast("Scene sent back to research — rerun the pipeline."); refresh(); });
+  btn(sr.flag === "revision" ? "⚑ Unflag revision" : "⚑ Flag for revision", "", async () => {
+    await api("/flag",{scene_id:sc.id, flag: sr.flag === "revision" ? null : "revision"}); refresh(); });
+  btn(sr.flag === "regen" ? "↺ Cancel regen request" : "↺ Request regeneration", "", async () => {
+    await api("/flag",{scene_id:sc.id, flag: sr.flag === "regen" ? null : "regen"}); refresh(); });
+  const rm = btn("Remove visual", "danger wide", async () => {
+    await api("/edit",{action:"remove_visual", scene_id:sc.id}); refresh(); }, !sc.visual);
+  rm.classList.add("wide");
+  act.appendChild(grid); pane.appendChild(act);
+
+  /* trim — inside the clip we already downloaded */
+  if (sc.visual){
+    const tr = el("div","sect");
+    tr.appendChild(el("h4","","Trim (m:ss.s from clip start)"));
+    const row = el("div","trimrow");
+    const tin = el("input"); tin.value = tc(sc.visual.trim_in_ms);
+    const tout = el("input"); tout.value = tc(sc.visual.trim_out_ms);
+    const ap = el("button","","Apply");
+    ap.onclick = async () => {
+      const a = parseTc(tin.value), b = parseTc(tout.value);
+      if (isNaN(a) || isNaN(b)) { toast("Use m:ss.s — e.g. 1:10.5"); return; }
+      if (a >= b) { toast("Start must be before end."); return; }
+      await api("/edit",{action:"trim", scene_id:sc.id,
+        trim_in_ms:a, trim_out_ms:b});
+      toast("Trim saved."); refresh(); };
+    row.append(tin, el("span","","–"), tout, ap);
+    tr.appendChild(row); pane.appendChild(tr);
+  }
+
+  /* pick your own window — any link, any timecode */
+  {
+    const pk = el("div","sect");
+    pk.appendChild(el("h4","","Use my own window"));
+    pk.appendChild(el("div","slot",
+      "Needs " + (sc.duration_ms/1000).toFixed(1) + "s of footage."));
+    const u = el("input"); u.placeholder = "YouTube link";
+    u.style.width = "100%"; u.style.marginBottom = "7px";
+    const row = el("div","trimrow");
+    const a = el("input"); a.placeholder = "1:10.5";
+    const b = el("input"); b.placeholder = "1:20.0";
+    if (src && src.url){        // prefilled from the clip in the cut, so moving
+      u.value = src.url;        // its window is an edit, not a retype
+      if (src.clip_start_ms != null){
+        a.value = tc(src.clip_start_ms); b.value = tc(src.clip_end_ms);
+      }
+    }
+    const go = el("button","","Use this");
+    go.onclick = async () => {
+      const s0 = parseTc(a.value), s1 = parseTc(b.value);
+      if (!u.value.trim()) { toast("Paste a YouTube link."); return; }
+      if (isNaN(s0) || isNaN(s1)) { toast("Times as m:ss.s — e.g. 1:10.5"); return; }
+      if (s0 >= s1) { toast("Start must be before end."); return; }
+      try {
+        await api("/edit",{action:"set_window", scene_id:sc.id,
+          url:u.value.trim(), start_ms:s0, end_ms:s1});
+        toast("Window queued — rerun the pipeline to fetch it."); refresh();
+      } catch(e){ toast(String(e.message || e)); }
+    };
+    row.append(a, el("span","","–"), b, go);
+    pk.append(u, row);
+    pane.appendChild(pk);
+  }
+
+  /* candidates — watch before you choose */
+  if (sc.alternatives && sc.alternatives.length){
+    const al = el("div","sect");
+    al.appendChild(el("h4","","Candidates (" + sc.alternatives.length + ")"));
+    sc.alternatives.forEach(a => {
+      const card = el("div","cand");
+      card.appendChild(el("div","t", a.title));
+      card.appendChild(el("div","m", a.channel
+        + (a.score != null ? ` · match ${a.score}` : " · hand-picked")));
+
+      /* the recommended window, editable in place — the recommendation is a
+         starting point, and the reviewer watching it usually finds a better
+         moment. Edited values are what `use this` sends. */
+      const wrow = el("div","trimrow");
+      const cin = el("input"); cin.value = tc(a.clip_start_ms);
+      const cout = el("input"); cout.value = tc(a.clip_end_ms);
+      const len = el("span","len","");
+      const showLen = () => {
+        const s = parseTc(cin.value), e = parseTc(cout.value);
+        len.textContent = (isNaN(s) || isNaN(e) || e <= s)
+          ? "—" : ((e - s)/1000).toFixed(1) + "s / needs "
+                  + (sc.duration_ms/1000).toFixed(1) + "s";
+      };
+      cin.oninput = cout.oninput = showLen; showLen();
+      // compare the TEXT, not the parsed ms: the boxes show 0.1s precision, so a
+      // recommendation of 1199253ms reads back as 1199300 and would look edited
+      const [was0, was1] = [cin.value, cout.value];
+      wrow.append(cin, el("span","","–"), cout, len);
+      card.appendChild(wrow);
+
+      const row = el("div","row");
+      if (a.url){
+        const link = el("a","","open on YouTube ↗");
+        link.href = a.url; link.target = "_blank"; link.rel = "noopener";
+        row.appendChild(link);
+        const watch = el("button","","▶ watch here");
+        watch.onclick = () => {
+          const old = card.querySelector(".ytwrap");
+          if (old){ old.remove(); return; }             // toggle
+          const id = ytId(a.url);
+          if (!id){ toast("Not a YouTube URL — use the link."); return; }
+          // play the window CURRENTLY typed, so an edit can be checked by eye
+          const s = parseTc(cin.value), e = parseTc(cout.value);
+          const w = el("div","ytwrap"), f = document.createElement("iframe");
+          f.src = `https://www.youtube-nocookie.com/embed/${id}`
+                + `?start=${Math.floor((isNaN(s) ? a.clip_start_ms : s)/1000)}`
+                + `&end=${Math.ceil((isNaN(e) ? a.clip_end_ms : e)/1000)}`;
+          f.allow = "encrypted-media; picture-in-picture";
+          f.referrerPolicy = "origin-when-cross-origin";
+          w.appendChild(f); card.appendChild(w);
+        };
+        row.appendChild(watch);
+      }
+      const use = el("button","","Use this");
+      use.onclick = async () => {
+        const s = parseTc(cin.value), e = parseTc(cout.value);
+        if (isNaN(s) || isNaN(e)) { toast("Times as m:ss.s — e.g. 1:10.5"); return; }
+        if (s < 0 || s >= e) { toast("Start must be before end."); return; }
+        try {
+          if (cin.value.trim() === was0 && cout.value.trim() === was1){
+            await api("/edit",{action:"swap_alternative", scene_id:sc.id,
+              candidate_idx:a.candidate_idx});
+            toast("Swap queued — rerun the pipeline to source it.");
+          } else {
+            // an edited window is a different fetch, not a reorder: queue it as
+            // a hand-picked candidate on the same video, taken verbatim
+            await api("/edit",{action:"set_window", scene_id:sc.id,
+              url:a.url, start_ms:s, end_ms:e, title:a.title});
+            toast("Your window queued — rerun the pipeline to fetch it.");
+          }
+          refresh();
+        } catch(err){ toast(String(err.message || err)); }
+      };
+      row.appendChild(use);
+      card.appendChild(row);
+      al.appendChild(card);
+    });
+    pane.appendChild(al);
+  }
+
+  /* comments */
+  const cm = el("div","sect"); cm.appendChild(el("h4","","Scene comments"));
+  sr.comments.forEach(c => {
+    const d = el("div","comment");
+    d.appendChild(el("div","t", c.t));
+    d.appendChild(el("div","", c.text));
+    cm.appendChild(d);
+  });
+  const crow = el("div","crow");
+  const ta = el("textarea"); ta.placeholder = "Add a comment for this scene…";
+  const send = el("button","","Add");
+  send.onclick = async () => {
+    if (!ta.value.trim()) return;
+    await api("/comment",{scene_id:sc.id, text:ta.value}); ta.value=""; refresh(); };
+  crow.append(ta, send); cm.appendChild(crow); pane.appendChild(cm);
+
+  /* history */
+  if (sr.history.length){
+    const h = el("div","sect"); h.appendChild(el("h4","","History"));
+    const list = el("div","hist");
+    sr.history.slice(-8).forEach(e =>
+      list.appendChild(el("div","", `${e.t.slice(5,16).replace("T"," ")}  ${e.event}`)));
+    h.appendChild(list); pane.appendChild(h);
+  }
+}
+
+/* ---------- inspector: project ---------- */
+function renderProject(){
+  const pane = $("projpane"); pane.innerHTML = "";
+  const sc = S.tl.score || {};
+  const m = el("div","sect"); m.appendChild(el("h4","","Enhancement score"));
+  const grid = el("div","metrics");
+  const met = (v,l) => { const d = el("div","metric");
+    d.appendChild(el("div","v", String(v))); d.appendChild(el("div","l", l));
+    grid.appendChild(d); };
+  met((sc.coverage_pct ?? 0) + "%", "coverage");
+  met(tc(sc.max_uncovered_stretch_ms || 0), "max gap");
+  met(sc.variety_index ?? "—", "variety");
+  met(sc.confidence_floor ?? "—", "conf. floor");
+  m.appendChild(grid); pane.appendChild(m);
+
+  const counts = countStatus();
+  const p = el("div","sect"); p.appendChild(el("h4","","Review progress"));
+  const kv = el("dl","kv");
+  const add = (k,v) => { kv.appendChild(el("dt","",k)); kv.appendChild(el("dd","",String(v))); };
+  add("Approved", counts.approved); add("Rejected", counts.rejected);
+  add("Flagged", counts.flagged); add("Pending", counts.pending);
+  p.appendChild(kv); pane.appendChild(p);
+
+  const cm = el("div","sect"); cm.appendChild(el("h4","","Project comments"));
+  (S.review.project_comments||[]).forEach(c => {
+    const d = el("div","comment");
+    d.appendChild(el("div","t", c.t));
+    d.appendChild(el("div","", c.text));
+    cm.appendChild(d);
+  });
+  const crow = el("div","crow");
+  const ta = el("textarea");
+  ta.placeholder = "Overall feedback: pacing, consistency, style…";
+  const send = el("button","","Add");
+  send.onclick = async () => {
+    if (!ta.value.trim()) return;
+    await api("/comment",{scene_id:null, text:ta.value}); ta.value=""; refresh(); };
+  crow.append(ta, send); cm.appendChild(crow); pane.appendChild(cm);
+
+  if (S.review.submitted){
+    const s = el("div","sect");
+    s.appendChild(el("h4","","Last submission"));
+    s.appendChild(el("div","comment",
+      `${S.review.submitted.t} — ${S.review.submitted.decision}`));
+    pane.appendChild(s);
+  }
+}
+function countStatus(){
+  const c = {approved:0, rejected:0, flagged:0, pending:0};
+  S.tl.scenes.forEach(s => c[status(s)]++);
+  return c;
+}
+
+/* ---------- top bar ---------- */
+function renderTop(){
+  const c = countStatus(), n = S.tl.scenes.length;
+  $("progress").innerHTML =
+    `<span><span class="dot" style="background:var(--ok)"></span>${c.approved}</span>` +
+    `<span><span class="dot" style="background:var(--bad)"></span>${c.rejected}</span>` +
+    `<span><span class="dot" style="background:var(--flag)"></span>${c.flagged}</span>` +
+    `<span><span class="dot" style="background:var(--pend)"></span>${c.pending}</span>` +
+    `<span style="margin-left:4px">${c.approved}/${n} approved</span>`;
+}
+
+/* ---------- submit ---------- */
+$("submitbtn").onclick = () => {
+  const c = countStatus(), blockers = c.rejected + c.flagged;
+  const mb = $("modalback"), m = $("modal");
+  m.innerHTML = "";
+  m.appendChild(el("h3","","Submit review"));
+  const sum = el("div","sum");
+  const met = (v,l,color) => { const d = el("div","metric");
+    const vv = el("div","v", String(v)); if (color) vv.style.color = color;
+    d.appendChild(vv); d.appendChild(el("div","l", l)); sum.appendChild(d); };
+  met(c.approved, "approved", "var(--ok)");
+  met(c.rejected, "rejected", c.rejected ? "var(--bad)" : null);
+  met(c.flagged, "flagged", c.flagged ? "var(--flag)" : null);
+  met(c.pending, "pending");
+  m.appendChild(sum);
+  if (blockers)
+    m.appendChild(el("div","warn",
+      "Rejected or flagged scenes present — you can request changes; " +
+      "approval unlocks once they are resolved."));
+  const row = el("div","row");
+  const cancel = el("button","","Cancel"); cancel.onclick = () => mb.classList.remove("open");
+  const changes = el("button","","Request changes");
+  changes.onclick = async () => {
+    const j = await api("/submit",{decision:"changes"});
+    mb.classList.remove("open"); toast(j.message); refresh(); };
+  const approve = el("button","primary","Approve project");
+  approve.className = "primary";
+  approve.disabled = blockers > 0;
+  approve.onclick = async () => {
+    const j = await api("/submit",{decision:"approve"});
+    mb.classList.remove("open"); toast(j.message); refresh(); };
+  row.append(cancel, changes, approve); m.appendChild(row);
+  mb.classList.add("open");
+};
+$("modalback").onclick = e => {
+  if (e.target === $("modalback")) $("modalback").classList.remove("open"); };
+
+/* ---------- playback ---------- */
+function select(sid){ S.sel = sid; renderAll(); }
+function selScene(){ return S.tl.scenes.find(s => s.id === S.sel); }
+$("prevsc").onclick = () => nav(-1);
+$("nextsc").onclick = () => nav(1);
+function nav(d){
+  if (!S.tl.scenes.length) return;
+  // From the main track there is no "current" scene index, so step to the scene
+  // nearest the playhead instead of falling off the front of the list.
+  let i = S.tl.scenes.findIndex(s => s.id === S.sel);
+  if (i < 0){
+    const t = player.currentTime * 1000;
+    i = S.tl.scenes.findIndex(s => s.start_ms >= t);
+    if (i < 0) i = S.tl.scenes.length - 1; else if (d > 0) i -= 1;
+  }
+  const j = Math.min(Math.max(i + d, 0), S.tl.scenes.length - 1);
+  select(S.tl.scenes[j].id);
+  player.currentTime = S.tl.scenes[j].start_ms / 1000;
+}
+$("playsc").onclick = () => {
+  const sc = selScene();
+  if (!sc){ player.play(); return; }   // main track selected: just play
+  player.currentTime = sc.start_ms / 1000;
+  S.sceneOnly = true; syncSceneOnlyBtn(); player.play();
+};
+$("sceneonly").onclick = () => { S.sceneOnly = !S.sceneOnly; syncSceneOnlyBtn(); };
+function syncSceneOnlyBtn(){
+  const b = $("sceneonly");
+  b.classList.toggle("active", S.sceneOnly);
+  b.textContent = "Scene loop: " + (S.sceneOnly ? "on" : "off");
+}
+player.addEventListener("timeupdate", () => {
+  const t = player.currentTime * 1000;
+  $("tc-cur").textContent = tc(t);
+  movePlayhead(t);
+  const active = S.tl.scenes.find(s => t >= s.start_ms && t < s.end_ms);
+  // Follow playback: inside a cutaway that scene is current; in the gaps between
+  // them the MAIN video is what is on screen, so the main track takes the
+  // selection. Under MIX scenes tile the whole runtime, so `active` is always
+  // found and the main row never steals focus.
+  const want = active ? active.id : MAIN;
+  if (S.playingId !== (active ? active.id : null)){
+    S.playingId = active ? active.id : null;
+    document.querySelectorAll("#cuttrack .seg").forEach((e,i) =>
+      e.classList.toggle("playing", S.tl.scenes[i] && S.tl.scenes[i].id === S.playingId));
+  }
+  if (!S.sceneOnly && want !== S.sel) select(want);
+  if (S.sceneOnly){
+    const sc = selScene();
+    if (sc && t >= sc.end_ms){ player.pause(); player.currentTime = sc.end_ms/1000; }
+  }
+});
+player.addEventListener("loadedmetadata", () => {
+  $("tc-tot").textContent = tc(player.duration * 1000);
+});
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  if (e.code === "Space"){ e.preventDefault();
+    player.paused ? player.play() : player.pause(); }
+  if (e.code === "ArrowLeft") nav(-1);
+  if (e.code === "ArrowRight") nav(1);
+});
+
+/* ---------- tabs / refresh ---------- */
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".pane").forEach(x => x.classList.remove("active"));
+  b.classList.add("active"); $(b.dataset.pane).classList.add("active");
+});
+function renderAll(){ renderStrip(); renderScene(); renderProject(); renderTop(); }
+if ([1,4,16,64].includes(_z)) { S.zoom = _z; }
+// a ?z= link should open where the work is, not at 00:00
+if (_z && _z !== 1) setTimeout(() => centreOn(anchorMs()), 250);
+function refresh(){ loadState(true); }
+loadState(false);
+</script>
+</body>
+</html>

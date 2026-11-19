@@ -31,8 +31,13 @@ export interface EditorApi extends EditorState {
   viewRevision: (rev: number | null) => void;
   refreshAssets: () => Promise<void>;
   upload: (file: File) => Promise<void>;
+  uploadAndWait: (file: File) => Promise<AssetRow | null>;
   startRender: () => Promise<string | null>;
-  analyze: (assetId: string) => Promise<string | null>;
+  analyze: (assetId: string, language?: string) => Promise<string | null>;
+  cutout: (assetId: string) => Promise<string | null>;
+  extractAudio: (assetId: string) => Promise<string | null>;
+  textToSound: (text: string) => Promise<string | null>;
+  importSound: (soundId: string) => Promise<AssetRow | null>;
   loadUnderstanding: (assetId: string) => Promise<Understanding | null>;
   proposeOps: (ops: Op[]) => Promise<boolean>;
   acceptProposal: (rev: number) => Promise<void>;
@@ -41,11 +46,13 @@ export interface EditorApi extends EditorState {
   clearError: () => void;
 }
 
-export function useEditor(projectId: string): EditorApi {
-  const [edl, setEdl] = useState<EDL | null>(null);
-  const [headRev, setHeadRev] = useState(0);
+export type InitialEditor = { edl: EDL; headRev: number; assets: AssetRow[] };
+
+export function useEditor(projectId: string, initial?: InitialEditor): EditorApi {
+  const [edl, setEdl] = useState<EDL | null>(initial?.edl ?? null);
+  const [headRev, setHeadRev] = useState(initial?.headRev ?? 0);
   const [viewRev, setViewRev] = useState<number | null>(null);
-  const [assets, setAssets] = useState<AssetRow[]>([]);
+  const [assets, setAssets] = useState<AssetRow[]>(initial?.assets ?? []);
   const [revisions, setRevisions] = useState<RevisionRow[]>([]);
   const [proposals, setProposals] = useState<RevisionRow[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job>>({});
@@ -55,31 +62,33 @@ export function useEditor(projectId: string): EditorApi {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [serverDown, setServerDown] = useState(false);
-  const headRevRef = useRef(0);
-  headRevRef.current = headRev;
+  const headRevRef = useRef(initial?.headRev ?? 0);
+  const viewRevRef = useRef<number | null>(null);
+  const mutationRef = useRef(false);
 
   // fetch() throws TypeError when the server is unreachable.
   const isNetworkError = (e: unknown) =>
     e instanceof TypeError || (e instanceof Error && /fetch/i.test(e.message));
 
   const refreshAll = useCallback(async () => {
-    const [project, freshEdl, freshAssets, revs, props] = await Promise.all([
+    // Timeline data is essential. Do not hide the entire edit when a secondary
+    // history/proposal request is slow or unavailable.
+    const [project, freshEdl, freshAssets] = await Promise.all([
       api.getProject(projectId),
       api.getEdl(projectId),
       api.listAssets(projectId),
-      api.revisions(projectId),
-      api.proposals(projectId),
     ]);
+    headRevRef.current = project.head_rev;
     setHeadRev(project.head_rev);
-    setEdl(freshEdl);
+    if (viewRevRef.current === null) setEdl(freshEdl);
     setAssets(freshAssets);
-    setRevisions(revs);
-    setProposals(props);
+    api.revisions(projectId).then(setRevisions).catch(() => undefined);
+    api.proposals(projectId).then(setProposals).catch(() => undefined);
     setServerDown(false);
   }, [projectId]);
 
   useEffect(() => {
-    refreshAll().catch((e) => {
+    Promise.resolve().then(refreshAll).catch((e) => {
       if (isNetworkError(e)) setServerDown(true);
       else setError(String(e));
     });
@@ -115,11 +124,13 @@ export function useEditor(projectId: string): EditorApi {
 
   const applyOps = useCallback(
     async (ops: Op[]): Promise<boolean> => {
-      if (viewRev !== null) return false; // read-only while viewing history
+      if (viewRevRef.current !== null || mutationRef.current) return false; // read-only while viewing history
+      mutationRef.current = true;
       setBusy(true);
       try {
         const result = await api.apply(projectId, headRevRef.current, ops);
         setEdl(result.edl);
+        headRevRef.current = result.rev;
         setHeadRev(result.rev);
         api.revisions(projectId).then(setRevisions).catch(() => undefined);
         return true;
@@ -138,13 +149,15 @@ export function useEditor(projectId: string): EditorApi {
         }
         return false;
       } finally {
+        mutationRef.current = false;
         setBusy(false);
       }
     },
-    [projectId, refreshAll, viewRev],
+    [projectId, refreshAll],
   );
 
   const undo = useCallback(async () => {
+    if (viewRevRef.current !== null || mutationRef.current) return;
     try {
       await api.undo(projectId);
       await refreshAll();
@@ -155,6 +168,7 @@ export function useEditor(projectId: string): EditorApi {
   }, [projectId, refreshAll]);
 
   const redo = useCallback(async () => {
+    if (viewRevRef.current !== null || mutationRef.current) return;
     try {
       await api.redo(projectId);
       await refreshAll();
@@ -166,12 +180,13 @@ export function useEditor(projectId: string): EditorApi {
 
   const viewRevision = useCallback(
     async (rev: number | null) => {
+      viewRevRef.current = rev;
       setViewRev(rev);
       if (rev === null) {
         await refreshAll().catch(() => undefined);
       } else {
         const snapshot = await api.getEdl(projectId, rev);
-        setEdl(snapshot);
+        if (viewRevRef.current === rev) setEdl(snapshot);
       }
     },
     [projectId, refreshAll],
@@ -196,7 +211,7 @@ export function useEditor(projectId: string): EditorApi {
 
   const startRender = useCallback(async (): Promise<string | null> => {
     try {
-      const r = await api.render(projectId);
+      const r = await api.render(projectId, viewRevRef.current ?? undefined);
       return r.job_id;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -205,9 +220,9 @@ export function useEditor(projectId: string): EditorApi {
   }, [projectId]);
 
   const analyze = useCallback(
-    async (assetId: string): Promise<string | null> => {
+    async (assetId: string, language?: string): Promise<string | null> => {
       try {
-        const r = await api.analyzeAsset(projectId, assetId);
+        const r = await api.analyzeAsset(projectId, assetId, language);
         return r.job_id;
       } catch (e) {
         if (isNetworkError(e)) setServerDown(true);
@@ -217,6 +232,91 @@ export function useEditor(projectId: string): EditorApi {
     },
     [projectId],
   );
+
+  const uploadAndWait = useCallback(async (file: File): Promise<AssetRow | null> => {
+    try {
+      const result = await api.uploadAsset(projectId, file);
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        const job = await api.getJob(result.job_id);
+        setJobs(prev => ({ ...prev, [job.id]: job }));
+        if (job.state === "failed" || job.state === "cancelled") {
+          throw new Error(job.error || "Media ingest failed.");
+        }
+        if (job.state === "done") {
+          const fresh = await api.listAssets(projectId);
+          setAssets(fresh);
+          await refreshAll();
+          return fresh.find(asset => asset.asset_id === result.asset_id) ?? null;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 250));
+      }
+      throw new Error("Media ingest timed out.");
+    } catch (e) {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(e instanceof ApiError ? e.message : String(e));
+      return null;
+    }
+  }, [projectId, refreshAll]);
+
+  const cutout = useCallback(async (assetId: string): Promise<string | null> => {
+    try {
+      const result = await api.cutoutAsset(projectId, assetId);
+      return result.job_id;
+    } catch (e) {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(e instanceof ApiError ? e.message : String(e));
+      return null;
+    }
+  }, [projectId]);
+
+  const extractAudio = useCallback(async (assetId: string): Promise<string | null> => {
+    try {
+      const result = await api.extractAudio(projectId, assetId);
+      return result.job_id;
+    } catch (e) {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(e instanceof ApiError ? e.message : String(e));
+      return null;
+    }
+  }, [projectId]);
+
+  const textToSound = useCallback(async (text: string): Promise<string | null> => {
+    try {
+      const result = await api.textToSound(projectId, text);
+      return result.job_id;
+    } catch (e) {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(e instanceof ApiError ? e.message : String(e));
+      return null;
+    }
+  }, [projectId]);
+
+  const importSound = useCallback(async (soundId: string): Promise<AssetRow | null> => {
+    try {
+      const result = await api.importSound(projectId, soundId);
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        const job = await api.getJob(result.job_id);
+        setJobs(prev => ({ ...prev, [job.id]: job }));
+        if (job.state === "failed" || job.state === "cancelled") {
+          throw new Error(job.error || "Sound ingest failed.");
+        }
+        if (job.state === "done") {
+          const fresh = await api.listAssets(projectId);
+          setAssets(fresh);
+          await refreshAll();
+          return fresh.find(asset => asset.asset_id === result.asset_id) ?? null;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 250));
+      }
+      throw new Error("Sound ingest timed out.");
+    } catch (e) {
+      if (isNetworkError(e)) setServerDown(true);
+      else setError(e instanceof ApiError ? e.message : String(e));
+      return null;
+    }
+  }, [projectId, refreshAll]);
 
   const loadUnderstanding = useCallback(
     async (assetId: string): Promise<Understanding | null> => {
@@ -231,6 +331,7 @@ export function useEditor(projectId: string): EditorApi {
 
   const proposeOps = useCallback(
     async (ops: Op[]): Promise<boolean> => {
+      if (viewRevRef.current !== null) return false;
       try {
         await api.apply(projectId, headRevRef.current, ops, "propose");
         await refreshAll();
@@ -248,6 +349,7 @@ export function useEditor(projectId: string): EditorApi {
 
   const acceptProposal = useCallback(
     async (rev: number) => {
+      if (viewRevRef.current !== null) return;
       try {
         await api.acceptProposal(projectId, rev);
         await refreshAll();
@@ -264,6 +366,7 @@ export function useEditor(projectId: string): EditorApi {
 
   const rejectProposal = useCallback(
     async (rev: number) => {
+      if (viewRevRef.current !== null) return;
       try {
         await api.rejectProposal(projectId, rev);
         await refreshAll();
@@ -295,12 +398,17 @@ export function useEditor(projectId: string): EditorApi {
     redo,
     select: setSelection,
     setPlayhead: (ms: number) => setPlayheadMs(Math.max(0, Math.round(ms))),
-    setZoom: (v: number) => setPxPerSec(Math.min(400, Math.max(10, v))),
+    setZoom: (v: number) => setPxPerSec(Math.min(400, Math.max(0.01, v))),
     viewRevision,
     refreshAssets,
     upload,
+    uploadAndWait,
     startRender,
     analyze,
+    cutout,
+    extractAudio,
+    textToSound,
+    importSound,
     loadUnderstanding,
     proposeOps,
     acceptProposal,

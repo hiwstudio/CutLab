@@ -1,0 +1,5 @@
+yt-dlp[default]
+faster-whisper
+python-dotenv
+openai        # only used when OPENROUTER_API_KEY is set (standalone LLM mode)
+# opencv-python  # optional: only for the 'face' style

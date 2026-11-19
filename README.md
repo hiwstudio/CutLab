@@ -1,101 +1,115 @@
 # CutLab
 
-A personal-first, professional, AI-native video editing system. Phase 0 builds
-the spine: **ingest real footage → build an EDL → apply ops with revisions and
-undo → render correct output with FFmpeg → survive crashes.**
+CutLab is a local video editing workspace for creating, reviewing, and finishing
+edits from several production engines. It combines a scene based timeline, media
+library, preview, revisions, undo and redo, and an AI director that proposes
+editable changes.
 
-- **EDL is the only source of truth** — one JSON document per project; the UI
-  renders it, ops mutate it, the render compiler executes it.
-- **Every mutation is a revision** — undo/redo are head-pointer moves.
-- **All heavy work is durable jobs** — SQLite-backed queue, checkpointed
-  stages, crash-resumable renders (a render that dies at minute 38 resumes).
-- **All times are integer milliseconds.**
+## What you can do
 
-## Layout
+- Create a timeline and edit video, audio, images, captions, and text.
+- Use CutLab's built in compaction and recap workflows.
+- Bring MixFix MIX/FIX projects into CutLab with their scene timing and source
+  history preserved.
+- Run Clipinn, Viral Clip Engine, Recap Engine, and HIW Studio from the bundled
+  engine pack, then bring their rendered media into the CutLab timeline.
+- Add your own effects, workflows, profiles, and engine adapters.
 
-```
-apps/server   Python 3.11+ / FastAPI — EDL engine, jobs, FFmpeg render pipeline
-apps/studio   Next.js / TypeScript — media library, preview, timeline, revisions
-capabilities/ registry (later phases)
-profiles/     brand profiles (stub)
-data/         gitignored: cutlab.db + per-project media/proxies/renders
-scripts/      dev.ps1 / dev.sh — start server + studio together
-```
+CutLab runs on your computer. Source files, project databases, model downloads,
+and renders stay local unless you choose a remote AI backend or external media
+source.
 
-## Setup (Windows)
+## Quick start
 
-Prereqs: Python 3.11+, Node 20+, FFmpeg + ffprobe on PATH
-(`winget install Gyan.FFmpeg`).
+Requirements: Git, Python 3.11+, Node.js 20+, npm, and FFmpeg with `ffprobe`.
+On Windows, install FFmpeg with `winget install Gyan.FFmpeg` and reopen the
+terminal.
 
 ```powershell
-# Server
-python -m venv apps\server\.venv
-apps\server\.venv\Scripts\pip install fastapi "uvicorn[standard]" pydantic python-multipart
-# (+ for tests: pytest httpx hypothesis numpy)
-
-# Studio
-cd apps\studio; npm install
+git clone <repository-url>
+cd CutLab
+scripts\setup.ps1
+scripts\dev.ps1
 ```
 
-> If another tool (e.g. ImageMagick) shadows ffmpeg on PATH, CutLab resolves
-> ffmpeg from ffprobe's directory automatically; override with the
-> `CUTLAB_FFMPEG` / `CUTLAB_FFPROBE` env vars.
+Open `http://localhost:3000`. The first setup installs the CutLab app and the
+bundled Python and Remotion engine dependencies. Transcription models download
+the first time you use them.
 
-## Run
+On macOS or Linux, use `bash scripts/setup.sh` and `bash scripts/dev.sh`.
+
+## Start with the editor
+
+1. Choose **New project** and give it a name.
+2. Select a landscape, vertical, HD, or 4K canvas.
+3. In the editor, open **Media Library → Upload**, choose a video, audio file,
+   or image, then add it to the timeline.
+4. Drag clips to arrange them. Use the preview, inspector, and revision history
+   to shape and review the edit.
+5. Export from the project toolbar when the cut is ready.
+
+The home screen also lets you open a MixFix MIX/FIX project directly. For any
+other engine, use the engine launcher below, then import its output through the
+Media Library.
+
+## Run a production engine
+
+After setup, run the desired workflow from the repository root:
 
 ```powershell
-scripts\dev.ps1     # server on http://127.0.0.1:8787, studio on http://localhost:3000
+scripts\engine.ps1 mixfix run --mode mix --project my-film
+scripts\engine.ps1 clipinn run "https://www.youtube.com/watch?v=VIDEO_ID" --style blur
+scripts\engine.ps1 viral --mode clip "C:\Videos\interview.mp4"
+scripts\engine.ps1 recap "C:\Videos\documentary.mp4"
+scripts\engine.ps1 hiw create-project "Why We Procrastinate"
 ```
 
-Or individually:
+The Linux/macOS launcher is `bash scripts/engine.sh <engine> <arguments...>`.
+The [engine guide](engines/README.md) explains each workflow and how to bring
+its result into CutLab. Each engine can also be used directly from its folder.
 
-```powershell
-cd apps\server; .venv\Scripts\python -m cutlab.main
-cd apps\studio; npm run dev
-```
+## AI and API keys
 
-## Test
+The default agent workflows use operator/manual mode and do not need an API
+key. Optional API keys belong in a local, ignored `.env` file for the engine
+that uses them. Never put a real key in source control. See
+[`apps/server/.env.example`](apps/server/.env.example) and each engine's
+`.env.example` for variable names.
+
+## Agent support
+
+Start with [`AGENTS.md`](AGENTS.md), then follow the engine-specific guide in
+[`engines/README.md`](engines/README.md). Agents can operate the same engine
+CLIs, inspect task files, and use CutLab's API and editor. The EDL remains the
+source of truth for edits; engines produce source media and CutLab owns the
+reviewed timeline.
+
+## More documentation
+
+- [Getting started and troubleshooting](docs/GETTING-STARTED.md)
+- [Engine connections and current support](docs/ENGINE-INTEGRATION.md)
+- [Architecture and build contract](docs/HANDOFF.md)
+- [Progress checklist](PROGRESS.md)
+- [Product direction](docs/VISION.md)
+- [Design decisions](DECISIONS.md)
+- [Known production fixes](LESSONS.md)
+
+## License
+
+The repository does not yet declare a project license. Select one before public
+distribution so users know what reuse is allowed. The bundled HIW Studio package
+and MixFix motion package also remain marked `UNLICENSED` pending that decision.
+
+## Development
 
 ```powershell
 cd apps\server
-.venv\Scripts\python -m pytest              # full suite (includes slow media tests)
-.venv\Scripts\python -m pytest -m "not slow"  # fast suite
-
+.venv\Scripts\python -m pytest -m "not slow"
 cd ..\studio
-npx playwright test                         # UI smoke (starts both servers itself)
+npm run build
+npx playwright test
 ```
 
-## API
-
-Base `http://127.0.0.1:8787/api/v1` — projects, apply (ops plans with
-optimistic locking), undo/redo, revisions + proposals (accept/reject), asset
-upload + ingest, analyze (understanding), compact, recap, render + L1 segment
-previews, director command/answer, `/media/{project}/...` file serving, and
-`WS /ws` for job/revision events. See `docs/HANDOFF.md` §A7 for the core
-surface; later-phase endpoints follow the same conventions.
-
-## Status
-
-**All phases (P0–P7) built and tested.**
-
-- **P0 spine** — EDL + ops/revisions/undo, durable jobs, chunked crash-resuming
-  FFmpeg renders, Studio editor.
-- **P1 understanding** — faster-whisper transcript, scenes, silence, beats,
-  per-profile saliency, as a resumable per-asset job.
-- **P2 AI director** — smart ops (remove_silence, caption_from_transcript,
-  reframe), propose→accept/reject loop, NL commands via pluggable LLM backend
-  (manual file hand-off by default; OpenRouter/Anthropic via env keys).
-- **P3 preview ladder + captions** — L0 live browser compositor, L1 exact
-  segment previews, add_emphasis, captions burned via ASS/libass (4 styles).
-- **P4 compaction** — clip-scoring rubric engine, compact op, durable job,
-  Telegram approval gate (@AlltronzBot; enable with `CUTLAB_TELEGRAM_*` env).
-- **P5 recap** — story outline → original narration (LLM) → Piper TTS → scene
-  matching → recap timeline as one proposal (adapted from recap-engine).
-- **P6 capabilities** — registry (effects/transitions/caption styles/export
-  presets) + brand profiles (systemlab, warriors-at-war, seatpass).
-- **P7 polish** — S2 design tokens (see DESIGN-SPEC.md), ⌘K command palette,
-  job toasts, a11y (focus rings, reduced motion).
-
-See [PROGRESS.md](PROGRESS.md) for the checklist, [DECISIONS.md](DECISIONS.md)
-for ambiguity resolutions and deliberate deferrals, [LESSONS.md](LESSONS.md)
-for hard-won fixes.
+The full server suite includes slower FFmpeg media checks. See
+[`AGENTS.md`](AGENTS.md) for architecture and machine-independent development
+rules.

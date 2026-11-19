@@ -1,0 +1,63 @@
+{
+  "name": "hiw-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HIW Studio - Human Is Weird Animation Engine. A standalone, code-driven 2D puppet/vector animation production system that renders videos from structured scene manifest JSON files.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "remotion studio src/remotion/index.ts",
+    "validate": "tsx src/cli/index.ts validate",
+    "preview": "tsx src/cli/index.ts preview",
+    "render": "tsx src/cli/index.ts render",
+    "render:draft": "tsx src/cli/index.ts render --quality draft",
+    "render:final": "tsx src/cli/index.ts render --quality final",
+    "create-project": "tsx src/cli/index.ts create-project",
+    "thumbnail": "tsx src/cli/index.ts thumbnail",
+    "brand": "tsx scripts/render-channel-art.ts",
+    "subscribe": "tsx scripts/render-subscribe.ts",
+    "shorts": "tsx src/cli/index.ts shorts",
+    "captions": "tsx src/cli/index.ts captions",
+    "voiceover": "tsx src/cli/index.ts voiceover",
+    "retime": "tsx src/cli/index.ts retime",
+    "inspect-assets": "tsx src/cli/index.ts inspect-assets",
+    "find-asset": "tsx src/cli/index.ts find-asset",
+    "templates": "tsx src/cli/index.ts templates",
+    "save-template": "tsx src/cli/index.ts save-template",
+    "add-scene": "tsx src/cli/index.ts add-scene",
+    "hiw": "tsx src/cli/index.ts",
+    "stick:new": "tsx stick-hiw/tools/createStickProject.ts",
+    "stick:prompts": "tsx stick-hiw/tools/genPrompts.ts",
+    "stick:voiceover": "tsx stick-hiw/tools/genVoiceover.ts",
+    "style:list": "tsx stick-hiw/tools/styleTool.ts list",
+    "style:extract": "tsx stick-hiw/tools/styleTool.ts extract",
+    "style:stills": "tsx stick-hiw/tools/styleTool.ts stills",
+    "style:approve": "tsx stick-hiw/tools/styleTool.ts approve",
+    "style:correct": "tsx stick-hiw/tools/styleTool.ts correct",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/run-tests.ts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/cli": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "commander": "^12.1.0",
+    "fs-extra": "^11.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "^4.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@fontsource/baloo-2": "^5.2.7",
+    "@fontsource/luckiest-guy": "^5.2.8",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

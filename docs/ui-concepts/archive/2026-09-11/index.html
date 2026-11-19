@@ -1,0 +1,168 @@
+<meta charset="utf-8">
+<title>CutLab Interface Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Page chrome is deliberately quiet: the concepts are the subject. Single dark world — editors are dark rooms. */
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#070708;color:#d9d9de;font:14px/1.45 "Hanken Grotesk",system-ui,sans-serif;overflow:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+  :focus-visible{outline:2px solid #8ab4ff;outline-offset:2px}
+  kbd{font-family:inherit}
+  .chrome{display:flex;align-items:center;gap:18px;height:48px;padding:0 14px 0 18px;background:#0b0b0d;border-bottom:1px solid #1b1b20}
+  .chrome-b{display:flex;align-items:baseline;gap:8px;font-weight:600;color:#f2f2f4;white-space:nowrap}
+  .chrome-b span{color:#6e6e78;font-weight:400}
+  .switch{display:flex;gap:2px;padding:3px;background:#131316;border-radius:9px;margin:0 auto;overflow-x:auto}
+  .switch button{height:28px;padding:0 12px;border-radius:7px;color:#8c8c96;font-size:13px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .switch button b{font:500 11px "JetBrains Mono",Consolas,monospace;color:#5c5c66}
+  .switch button:hover{color:#e4e4e8}
+  .switch button[aria-current=true]{background:#232328;color:#f2f2f4}
+  .switch button[aria-current=true] b{color:#b5b5bd}
+  .chrome-n{color:#6e6e78;font-size:12px;white-space:nowrap}
+  .viewport{position:relative;height:calc(100vh - 48px);overflow:hidden}
+  .stage.is-overview{height:100%;overflow:auto}
+  .stage.is-app{position:absolute;left:50%;top:50%;width:1440px;height:860px;transform-origin:center center;box-shadow:0 0 0 1px #1b1b20,0 30px 80px rgba(0,0,0,.6)}
+
+  /* overview */
+  .ov{max-width:1360px;margin:0 auto;padding:44px 36px 72px}
+  .ov-k,.ov-tag,.ov-try-h{font:500 11px/1 "JetBrains Mono",Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6e6e78;margin:0}
+  .ov h1{font:600 40px/1.05 "Hanken Grotesk",system-ui,sans-serif;letter-spacing:-.025em;color:#f4f4f6;margin:14px 0 0;text-wrap:balance}
+  .ov-lede{max-width:70ch;color:#9b9ba5;font-size:15.5px;line-height:1.6;margin:14px 0 0}
+  .ov-lede b{color:#e4e4e8;font-weight:600}
+  .ov-try-h{margin-top:30px}
+  .ov-try{list-style:none;counter-reset:t;display:flex;flex-wrap:wrap;gap:8px;padding:0;margin:12px 0 40px}
+  .ov-try li{counter-increment:t;padding:6px 12px 6px 7px;border-radius:8px;background:#111114;border:1px solid #1c1c21;color:#b9b9c1;font-size:13px;display:flex;gap:9px;align-items:center}
+  .ov-try li::before{content:counter(t);font:500 11px "JetBrains Mono",Consolas,monospace;color:#8c8c96;width:20px;height:20px;border-radius:5px;background:#1c1c21;display:grid;place-items:center}
+  .ov-try kbd{font:500 11px "JetBrains Mono",Consolas,monospace;color:#8c8c96;padding:1px 5px;border:1px solid #2a2a30;border-radius:4px}
+  .ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 32px}
+  .mini{position:relative;aspect-ratio:1440/860;border-radius:10px;overflow:hidden;border:1px solid #1d1d22;cursor:pointer;background:#000}
+  .mini:hover{border-color:#3a3a42}
+  .mini-stage{position:absolute;left:0;top:0;width:1440px;height:860px;transform:scale(var(--k,.4));transform-origin:0 0;pointer-events:none}
+  .ov-meta{padding:18px 2px 0;display:grid;gap:10px}
+  .ov h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#f4f4f6}
+  .ov-thesis{margin:0;color:#a3a3ad;font-size:14.5px;line-height:1.6;max-width:66ch}
+  .ov-pc{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:4px}
+  .ov-pc h4{margin:0 0 7px;font-size:12px;font-weight:600;color:#d7d7dc}
+  .ov-pc ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+  .ov-pc li{font-size:13px;line-height:1.45;color:#8f8f99;padding-left:14px;position:relative}
+  .ov-pc li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:2px;border-radius:1px;background:#6bd3a0}
+  .ov-pc div+div li::before{background:#e0a36b}
+  .ov-open{justify-self:start;margin-top:6px;height:34px;padding:0 14px;border-radius:8px;background:#f2f2f4;color:#0b0b0d;font-weight:600;font-size:13px;display:flex;align-items:center;gap:10px}
+  .ov-open:hover{background:#fff}
+  .ov-open kbd{font:500 11px "JetBrains Mono",Consolas,monospace;color:#77777f}
+  .ov-foot{margin:56px 0 0;color:#6e6e78;font-size:13px;max-width:82ch;line-height:1.65;border-top:1px solid #1b1b20;padding-top:18px}
+  .ov-foot b{color:#a3a3ad;font-weight:600}
+  @media (max-width:980px){.ov-grid,.ov-pc{grid-template-columns:1fr}.chrome-n{display:none}.ov h1{font-size:30px}}
+
+  /* shared widget mechanics — each concept skins these through its own custom properties */
+  [data-concept]{scrollbar-color:rgba(255,255,255,.14) transparent}
+  [data-concept] .ic{flex:none;display:block}
+  [data-concept] button:disabled{opacity:.35;cursor:default}
+  .pv{position:relative;container-type:inline-size;background:#000;overflow:hidden}
+  .pv canvas{display:block;width:100%;height:auto;aspect-ratio:16/9}
+  .pv-cap{position:absolute;left:50%;bottom:7%;transform:translateX(-50%);max-width:80%;text-align:center;color:#fff;font:500 2.6cqw/1.25 var(--cap-font,system-ui,sans-serif);text-shadow:0 1px 3px rgba(0,0,0,.85);text-wrap:balance;white-space:normal;font-style:normal}
+  .pv-cap.cap-bold{font-weight:800;font-size:3cqw;background:rgba(0,0,0,.6);padding:.2em .6em;border-radius:.3em;text-shadow:none;letter-spacing:-.01em}
+  .tl{display:flex;height:100%;min-height:0;position:relative;user-select:none;-webkit-user-select:none}
+  .tl-side{flex:none;width:var(--head-w);display:flex;flex-direction:column;z-index:5;background:var(--tl-head-bg)}
+  .tl-corner{height:calc(var(--ruler-h) + var(--band-h, 0px));flex:none;display:flex;align-items:center}
+  .tl-heads{overflow:hidden}
+  .tl-scroll{flex:1;min-width:0;contain:inline-size;overflow-x:auto;overflow-y:hidden;position:relative;background:var(--tl-bg);scrollbar-width:thin;scrollbar-color:#3a3a42 transparent}
+  .tl-inner{position:relative;min-height:100%}
+  .tl-band{position:relative;height:var(--band-h)}
+  .sb{position:absolute;top:0;bottom:0;overflow:hidden;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .sb span{overflow:hidden;text-overflow:ellipsis}
+  .tl-ruler{position:relative;height:var(--ruler-h);cursor:col-resize}
+  .tk{position:absolute;top:0;bottom:0;border-left:1px solid var(--tick);padding:3px 0 0 4px;font:var(--tick-font);color:var(--tick-text);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .tkm{position:absolute;bottom:0;height:4px;border-left:1px solid var(--tick)}
+  .mk{position:absolute;bottom:0;width:0;height:0;margin-left:-5px;border:5px solid transparent;border-bottom:7px solid var(--mk,#e0a36b)}
+  .nt{position:absolute;bottom:2px;width:10px;height:10px;margin-left:-5px;border-radius:3px;transform:rotate(45deg);background:var(--note,#9b8cff);z-index:2}
+  .tl-lanes{position:relative;overflow:hidden}
+  .ln,.th{position:relative;height:var(--h-audio)}
+  .ln.r-cap,.th.r-cap{height:var(--h-cap)}
+  .ln.r-over,.th.r-over{height:var(--h-over)}
+  .ln.r-main,.th.r-main{height:var(--h-main)}
+  .cl{position:absolute;top:var(--clip-inset,2px);bottom:var(--clip-inset,2px);overflow:hidden;cursor:grab;display:flex;align-items:flex-start}
+  .cl .fs{position:absolute;inset:0;background-size:auto 100%;background-repeat:repeat-x;background-position:left center}
+  .cl .wv{position:absolute;left:0;top:0;width:100%;height:100%}
+  .cl .cn{position:relative;z-index:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;pointer-events:none}
+  .cl .cn em{font-style:normal;opacity:.7}
+  .cl .h{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:3}
+  .cl .h-l{left:0}.cl .h-r{right:0}
+  .cl.is-muted,.ln.is-muted .cl{opacity:.38}
+  .ph{position:absolute;top:0;bottom:0;left:0;width:0;z-index:6;pointer-events:none}
+  .ph i{position:absolute;top:0;bottom:0;left:-.5px;width:1px;background:var(--ph)}
+  .ph::before{content:"";position:absolute;top:0;left:-6px;border:6px solid transparent;border-top:8px solid var(--ph)}
+  .pr{position:absolute;top:0;bottom:0;z-index:4;pointer-events:none;background:repeating-linear-gradient(135deg,var(--pr-a) 0 5px,transparent 5px 10px);box-shadow:inset 1px 0 var(--pr-line),inset -1px 0 var(--pr-line)}
+  .scope{position:absolute;top:0;bottom:0;z-index:3;pointer-events:none;box-shadow:0 0 0 9999px var(--scope-dim),inset 0 0 0 1px var(--scope-line)}
+  .ai-compose{display:flex;align-items:flex-end;gap:8px}
+  .ai-compose textarea{flex:1;resize:none;background:none;border:0;color:inherit;font:inherit;outline:none;min-height:20px;max-height:120px;padding:0}
+  .ai-compose textarea::placeholder{color:var(--faint,#666)}
+  .ai-thinking i{display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor;margin-right:3px;animation:blink 1s infinite}
+  .ai-thinking i:nth-child(2){animation-delay:.15s}.ai-thinking i:nth-child(3){animation-delay:.3s}
+  @keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+  [data-concept] input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:var(--range-bg,#333);outline-offset:4px;cursor:pointer}
+  [data-concept] input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--range-thumb,#fff);border:0}
+  [data-concept] input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--range-thumb,#fff);border:0}
+  #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#f2f2f4;color:#0b0b0d;padding:8px 14px;border-radius:8px;font-size:13px;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:90vw}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="chrome">
+  <div class="chrome-b">CutLab <span>Interface concepts</span></div>
+  <nav class="switch" aria-label="Concepts">
+    <button data-show="overview">Compare <b>0</b></button>
+    <button data-show="A">Studio <b>1</b></button>
+    <button data-show="B">Bay <b>2</b></button>
+    <button data-show="C">Director <b>3</b></button>
+    <button data-show="D">Spine <b>4</b></button>
+  </nav>
+  <div class="chrome-n">Sample project · edits carry across concepts</div>
+</header>
+<main class="viewport"><div id="stage" class="stage"></div></main>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="paint.js"></script>
+<script src="core.js"></script>
+<script src="ui.js"></script>
+<script src="concept-a.js"></script>
+<script src="concept-b.js"></script>
+<script src="concept-c.js"></script>
+<script src="concept-d.js"></script>
+<script>
+CONCEPTS.overview = {
+  mount(root) {
+    const ids = ["A", "B", "C", "D"];
+    root.innerHTML = `<div class="ov">
+      <p class="ov-k">CutLab · interface exploration · September 2026</p>
+      <h1>Four ways to edit the same film.</h1>
+      <p class="ov-lede">Every concept opens the same generated project — <b>The Last Lighthouse</b>, 8 scenes and 6 tracks handed over by recap-engine. Edits, undo history and the AI log are shared, so you are comparing interfaces on identical work, not different demos.</p>
+      <p class="ov-try-h">Try the same six things in each</p>
+      <ol class="ov-try"><li>Play from scene 3</li><li>Split a clip <kbd>S</kbd></li><li>Drag a clip edge to trim</li><li>Ask the AI to move scene 5 before scene 4, then apply</li><li>Mute the music track</li><li>Undo all of it <kbd>Ctrl Z</kbd></li></ol>
+      <div class="ov-grid">${ids.map((id, i) => { const c = CONCEPTS[id]; return `<article>
+        <div class="mini" data-show="${id}"><div class="mini-stage" data-concept="${id}" aria-hidden="true" inert></div></div>
+        <div class="ov-meta"><p class="ov-tag">Concept ${id} · ${c.tag}</p><h2>${c.name}</h2><p class="ov-thesis">${c.thesis}</p>
+          <div class="ov-pc"><div><h4>Strong at</h4><ul>${c.pros.map((x) => `<li>${x}</li>`).join("")}</ul></div><div><h4>Costs</h4><ul>${c.cons.map((x) => `<li>${x}</li>`).join("")}</ul></div></div>
+          <button class="ov-open" data-show="${id}">Open ${c.name} <kbd>${i + 1}</kbd></button></div></article>`; }).join("")}</div>
+      <p class="ov-foot"><b>What's real in these prototypes:</b> playback, scrubbing, select, drag-move, edge trim with snapping, split, delete, ripple, scene reorder, track mute/lock/solo, clip volume, undo/redo and the propose → apply AI loop, all on one shared project model mirroring CutLab's EDL ops. <b>What's layout only:</b> effects, transitions, text templates and export. The AI understands a fixed set of edit intents; the real director plans against the live EDL.</p>
+    </div>`;
+    const views = [...root.querySelectorAll(".mini-stage")].map((el) => ({ el, v: CONCEPTS[el.dataset.concept].mount(el) }));
+    const fit = () => root.querySelectorAll(".mini").forEach((m) => m.firstElementChild.style.setProperty("--k", m.clientWidth / 1440));
+    root._ro?.disconnect();
+    root._ro = new ResizeObserver(fit); root._ro.observe(root);
+    return {
+      root,
+      update() {
+        fit();
+        const keep = S.pps; S.pps = 10.4;
+        views.forEach(({ el, v }) => { v.update(); drawPreviews(el, true); });
+        S.pps = keep;
+      },
+      tick() {},
+    };
+  },
+};
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-show]"); if (b) showConcept(b.dataset.show); });
+showConcept(location.hash.slice(1) || "overview");
+requestAnimationFrame(loop);
+</script>

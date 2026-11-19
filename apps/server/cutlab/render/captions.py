@@ -58,6 +58,16 @@ _BUILTIN_STYLES: dict[str, CaptionStyle] = {
                      shadow=0.0, size_frac=0.05),
         CaptionStyle(id="top-title", name="Top Title", align=8,
                      size_frac=0.065, margin_v_frac=0.08, bold=-1),
+        CaptionStyle(id="karaoke", name="Karaoke Lyrics", font="Arial Black",
+                     size_frac=0.068, primary="&H00FFFFFF",
+                     outline_colour="&H00804020", outline=4.0, shadow=2.0,
+                     margin_v_frac=0.12),
+        CaptionStyle(id="title-card", name="Title Card", font="Arial Black",
+                     size_frac=0.09, align=5, outline=4.5, shadow=2.5,
+                     margin_v_frac=0.05),
+        CaptionStyle(id="lower-third", name="Lower Third", font="Arial",
+                     size_frac=0.052, align=1, border_style=3, outline=1.2,
+                     shadow=0.0, margin_v_frac=0.08),
     )
 }
 DEFAULT_STYLE = "default"

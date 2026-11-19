@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic>=2",
     "python-multipart",
+    "opencv-python-headless",
 ]
 
 [tool.pytest.ini_options]

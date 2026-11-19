@@ -1,7 +1,7 @@
-# CUTLAB — CLAUDE CODE BUILD HANDOFF
+# CUTLAB — AGENT BUILD HANDOFF
 ## Full Architecture Spec + Phase 0 Build Instructions
 
-You (Claude Code) are building **CutLab**: a personal-first, professional, AI-native video editing system. This document is the complete spec. Read all of it before writing any code. Part A tells you what the system is. Part B tells you exactly what to build right now. Do not build anything outside Part B's scope.
+You are building **CutLab**: a professional, AI-native video editing system. This document is the architecture and original build spec. Read the current `AGENTS.md`, `PROGRESS.md`, and `docs/ENGINE-INTEGRATION.md` alongside it before changing the code. Keep new work within the active build scope.
 
 ---
 
@@ -16,7 +16,7 @@ Three engines share one core:
 - **Compaction Engine** — saliency-driven; shortens any video (long → short)
 - **Recap Engine** — script-spine-driven; retells long story content as narrated recaps
 
-Built personal-first for the owner's brands (SystemLab, Warriors at War, SeatPass); a SaaS subset may be extracted much later. Runs locally on Windows now; deploys to Railway later with no rewrite (hosting change only).
+CutLab is designed for local editing and agent-assisted production across different projects and workflows. Its app and launcher scripts support Windows, macOS, and Linux; deployments can add a separate hosting configuration.
 
 ## A2. Non-negotiable principles
 
@@ -279,7 +279,7 @@ cutlab/
 
 ## A11. Later phases (context only — DO NOT BUILD NOW)
 
-P1 Understanding Layer (faster-whisper, PySceneDetect, silencedetect, librosa beats, saliency v1 with per-profile weights) → P2 AI Director v1 (context compiler, plan→propose→accept loop, first smart ops incl. remove_silence, caption_from_transcript, reframe) → P3 L0 browser compositor + L1 segment renders + emphasis ops + first Remotion caption styles → P4 Compaction Engine + Telegram gate (@AlltronzBot) → P5 Recap Engine (story pass → script gate → ElevenLabs VO → WhisperX timing map → scene retrieval → dress) → P6 capability registry at depth + 3 brand profiles → P7 pro polish. Ecosystem reuse when those phases come: faster-whisper (CLIPFORGE), Timing Map + WhisperX (VB Studio), Remotion craft (ad system / HIW), SQLite durability + approval gates (Agent OS / FLOWDECK patterns).
+P1 Understanding Layer (transcription, scene/silence/beat analysis, saliency) → P2 AI Director (context compiler, plan→propose→accept loop and smart edit operations) → P3 browser compositor, segment renders and caption styles → P4 Compaction Engine and optional Telegram approval gate → P5 Recap Engine (story outline, narration, timing and scene retrieval) → P6 capability registry and reusable profiles → P7 editor polish. Reuse the bundled engines and their tested media workflows when extending these phases.
 
 ---
 
@@ -291,7 +291,7 @@ Build the spine: **ingest real footage → hand-write or UI-build an EDL → app
 
 ## B2. Environment
 
-- Windows 11, user `ALLTRON`. Develop Windows-native (PowerShell scripts; use `pathlib` everywhere, no hardcoded separators). Keep everything Railway-portable: no Windows-only APIs.
+- Keep filesystem paths platform-neutral with `pathlib` in Python and `path.join` in TypeScript. Provide matching PowerShell and shell launchers where setup behavior differs by platform.
 - Python 3.11+, Node 20+, FFmpeg + ffprobe on PATH (verify at server startup; fail loud with install instructions if missing).
 - Ports: server 8787, studio 3000. SQLite WAL. All state under `./data/`.
 

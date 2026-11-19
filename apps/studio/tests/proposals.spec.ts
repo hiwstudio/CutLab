@@ -38,6 +38,6 @@ test("propose a smart edit and accept it", async ({ page }) => {
   await review.locator("[data-testid^=accept-proposal-]").first().click();
   await expect(review).toBeHidden({ timeout: 15_000 });
   await expect(page.getByTestId("project-name")).toBeVisible();
-  // Header shows the new canvas dimensions after accept.
-  await expect(page.locator("header")).toContainText("1080×1920", { timeout: 15_000 });
+  // The compact format indicator shows the accepted canvas dimensions.
+  await expect(page.getByTestId("project-format")).toHaveText("1080×1920", { timeout: 15_000 });
 });

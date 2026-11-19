@@ -4,6 +4,7 @@ export interface Canvas {
   width: number;
   height: number;
   fps: number;
+  background_color?: string;
 }
 
 export interface Project {
@@ -21,6 +22,7 @@ export interface Asset {
   duration_ms?: number;
   width?: number;
   height?: number;
+  understanding?: string;
 }
 
 export interface AssetRow {
@@ -34,6 +36,14 @@ export interface AssetRow {
   height?: number | null;
   understanding?: string | null;
   status: "ingesting" | "ready" | "failed";
+}
+
+export interface LibrarySound {
+  id: string;
+  title: string;
+  kind: "music" | "sfx";
+  category: string;
+  filename: string;
 }
 
 export interface Transform {
@@ -51,8 +61,21 @@ export interface MediaClip {
   start_ms: number;
   speed?: number;
   gain_db?: number;
+  fade_in_ms?: number;
+  fade_out_ms?: number;
+  audio_denoise?: boolean;
+  audio_low_cut_hz?: number;
+  audio_high_cut_hz?: number;
+  audio_effect?: "none" | "voice-enhance" | "telephone" | "echo";
+  reversed?: boolean;
+  freeze_frame_at_ms?: number;
+  video_fade_in_ms?: number;
+  video_fade_out_ms?: number;
+  opacity?: number;
   transform?: Transform;
   crop?: { mode: string; rect?: { x: number; y: number; w: number; h: number } };
+  effects?: { cap: string; params: Record<string, unknown> }[];
+  transition_out?: { cap: string; duration_ms: number };
 }
 
 export interface CaptionClip {
@@ -71,6 +94,20 @@ export interface Track {
   id: string;
   kind: TrackKind;
   clips: Clip[];
+  name?: string;
+  role?: "footage" | "overlay" | "voiceover" | "music" | "sfx" | "captions" | "other";
+  muted?: boolean;
+  solo?: boolean;
+  locked?: boolean;
+  gain_db?: number;
+}
+
+export interface Scene {
+  id: string;
+  title: string;
+  start_ms: number;
+  end_ms: number;
+  approved: boolean;
 }
 
 export interface EDL {
@@ -79,11 +116,13 @@ export interface EDL {
     id: string;
     name: string;
     profile?: string;
+    engine_source?: Record<string, string>;
     canvas: Canvas;
     duration_ms: number;
   };
   assets: Record<string, Asset>;
   tracks: Track[];
+  scenes?: Scene[];
 }
 
 export interface Job {

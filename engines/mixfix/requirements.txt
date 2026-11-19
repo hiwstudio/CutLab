@@ -1,0 +1,9 @@
+# Core. ffmpeg/ffprobe must be installed on the system PATH.
+pyyaml>=6.0
+faster-whisper>=1.0    ; # transcription (CPU); optional if transcriber: json
+yt-dlp>=2025.1.1       ; # YouTube search/subtitles/section extraction (Phase 2)
+scenedetect>=0.6       ; # FIX mode shot boundaries (Phase 5)
+opencv-python>=4.8     ; # FIX mode face-presence sampling (Phase 5)
+pytest>=8.0            ; # dev/tests
+# Optional local vision degradation (verify_clip without any brain):
+#   pip install open_clip_torch torch --index-url https://download.pytorch.org/whl/cpu

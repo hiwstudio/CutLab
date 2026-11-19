@@ -91,6 +91,10 @@ def main() -> None:
     worker.register("ingest", ingest_handler)
     worker.register("render", render_handler)
     worker.register("understanding", understanding_handler)
+    from .engine_import import engine_import_handler, engine_refresh_handler, engine_request_handler
+    worker.register("engine_import", engine_import_handler)
+    worker.register("engine_refresh", engine_refresh_handler)
+    worker.register("engine_request", engine_request_handler)
     queue.recover_on_start()
     if args.once:
         while worker.run_one():

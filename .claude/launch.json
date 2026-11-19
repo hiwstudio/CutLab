@@ -10,10 +10,17 @@
     },
     {
       "name": "server",
-      "runtimeExecutable": "C:\\Users\\ALLTRON\\content\\CutLab\\apps\\server\\.venv\\Scripts\\python.exe",
+      "runtimeExecutable": "${workspaceFolder}/apps/server/.venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "cutlab.main"],
       "cwd": "apps/server",
       "port": 8787
+    },
+    {
+      "name": "ui-concepts",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8790", "--bind", "127.0.0.1"],
+      "cwd": "docs/ui-concepts",
+      "port": 8790
     }
   ]
 }

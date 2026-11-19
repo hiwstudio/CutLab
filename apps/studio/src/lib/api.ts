@@ -6,6 +6,7 @@ import type {
   EDL,
   Issue,
   Job,
+  LibrarySound,
   Op,
   Project,
   RevisionRow,
@@ -13,7 +14,7 @@ import type {
 } from "./types";
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_CUTLAB_API ?? "http://127.0.0.1:8787";
+  process.env.NEXT_PUBLIC_CUTLAB_API ?? "";
 
 export class ApiError extends Error {
   constructor(
@@ -48,6 +49,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  engineProjects: () => request<{ name: string; scene_count: number; duration_ms: number }[]>("/api/v1/engines/mixfix/projects"),
+  importEngine: (sourceProject: string, mode: string, canvas: Canvas) =>
+    request<{project_id: string; job_id: string; warnings: string[]}>("/api/v1/engines/mixfix/import", {
+      method: "POST", body: JSON.stringify({source_project: sourceProject, mode, canvas}),
+    }),
+  engineLink: (id: string, rev?: number) => request<EngineLink>(`/api/v1/projects/${id}/engine-link${rev === undefined ? "" : `?rev=${rev}`}`),
+  engineScene: (id: string, sceneId: string, baseRev: number, action: "refresh" | "request", note = "") =>
+    request<{job_id: string}>(`/api/v1/projects/${id}/engine-scenes/${sceneId}/${action}`, {
+      method: "POST", body: JSON.stringify({base_rev: baseRev, note}),
+    }),
   createProject: (name: string, canvas: Canvas) =>
     request<Project>("/api/v1/projects", {
       method: "POST",
@@ -81,6 +92,13 @@ export const api = {
       method: "POST",
     }),
   listAssets: (id: string) => request<AssetRow[]>(`/api/v1/projects/${id}/assets`),
+  listSounds: () => request<LibrarySound[]>("/api/v1/sound-library"),
+  soundPreviewUrl: (soundId: string) => `${API_BASE}/api/v1/sound-library/${soundId}/preview`,
+  importSound: (id: string, soundId: string) =>
+    request<{ asset_id: string; job_id: string; status: string }>(
+      `/api/v1/projects/${id}/sound-library/${soundId}`,
+      { method: "POST" },
+    ),
   uploadAsset: async (id: string, file: File) => {
     const form = new FormData();
     form.append("file", file, file.name);
@@ -94,10 +112,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify(rev !== undefined ? { rev } : {}),
     }),
-  analyzeAsset: (id: string, assetId: string) =>
+  analyzeAsset: (id: string, assetId: string, language?: string) =>
     request<{ asset_id: string; job_id: string; status: string }>(
       `/api/v1/projects/${id}/assets/${assetId}/analyze`,
+      { method: "POST", body: JSON.stringify(language ? { language } : {}) },
+    ),
+  cutoutAsset: (id: string, assetId: string) =>
+    request<{ asset_id: string; job_id: string; status: string }>(
+      `/api/v1/projects/${id}/assets/${assetId}/cutout`,
       { method: "POST" },
+    ),
+  extractAudio: (id: string, assetId: string) =>
+    request<{ asset_id: string; job_id: string; status: string }>(
+      `/api/v1/projects/${id}/assets/${assetId}/extract-audio`,
+      { method: "POST" },
+    ),
+  textToSound: (id: string, text: string) =>
+    request<{ asset_id: string; job_id: string; status: string }>(
+      `/api/v1/projects/${id}/text-to-sound`,
+      { method: "POST", body: JSON.stringify({ text }) },
     ),
   getUnderstanding: (id: string, assetId: string) =>
     request<Understanding>(
@@ -116,6 +149,7 @@ export const api = {
       body: JSON.stringify({ request_id: requestId, answer }),
     }),
   getJob: (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`),
+  cancelJob: (jobId: string) => request<{ok: boolean}>(`/api/v1/jobs/${jobId}/cancel`, {method: "POST"}),
   recapAsset: (id: string, assetId: string, targetMinutes: number) =>
     request<{ job_id: string }>(
       `/api/v1/projects/${id}/assets/${assetId}/recap`,
@@ -136,6 +170,21 @@ export const api = {
     ),
 };
 
+export interface EngineScene {
+  id: string;
+  narration?: string;
+  visual_intent?: string;
+  visual?: {kind: string; source?: {url?: string; title?: string; channel?: string}; path: string};
+  alternatives?: {title?: string; url?: string}[];
+}
+
+export interface EngineLink {
+  source: Record<string, string>;
+  manifest: {warnings: string[]; scenes: EngineScene[]; total_ms: number};
+  scenes: Record<string, {source_scene_id: string; clip_id: string}>;
+  requests: {id: string; state: string; scene_id: string; note: string}[];
+}
+
 export function mediaUrl(projectId: string, relPath: string): string {
   return `${API_BASE}/media/${projectId}/${relPath}`;
 }
@@ -154,7 +203,8 @@ export function connectWs(
   projectId: string,
   onEvent: (e: WsEvent) => void,
 ): () => void {
-  const url = API_BASE.replace(/^http/, "ws") + "/ws";
+  const origin = API_BASE || window.location.origin;
+  const url = origin.replace(/^http/, "ws") + "/ws";
   let ws: WebSocket | null = null;
   let closed = false;
   let retry: ReturnType<typeof setTimeout> | null = null;

@@ -159,6 +159,16 @@ def validate(edl_data: dict[str, Any] | EDL, base_dir: str | Path | None = None)
                 )
             prev_start, prev_end, prev_id = start, max(end, prev_end or 0), clip.id
 
+    scene_ids = set()
+    previous_end = -1
+    for i, scene in enumerate(edl.scenes):
+        if scene.id in scene_ids:
+            errors.append(Issue("E_DUP", f"scenes[{i}].id", "duplicate scene id"))
+        scene_ids.add(scene.id)
+        if scene.start_ms < previous_end:
+            errors.append(Issue("E_OVERLAP", f"scenes[{i}]", "scene ranges must be sorted and non-overlapping"))
+        previous_end = max(previous_end, scene.end_ms)
+
     # 4. Derived duration.
     computed = edl.computed_duration_ms()
     if edl.project.duration_ms not in (0, computed):

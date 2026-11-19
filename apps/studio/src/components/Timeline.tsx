@@ -3,11 +3,12 @@
 import { useCallback, useRef, useState } from "react";
 import { mediaUrl } from "@/lib/api";
 import type { Clip, EDL, MediaClip, Op, Track } from "@/lib/types";
-import { clipEndMs, clipLenMs, isMediaClip } from "@/lib/types";
+import { clipLenMs, isMediaClip } from "@/lib/types";
+import { SpineIcon } from "./SpineIcon";
 import { WaveStrip } from "./WaveStrip";
 
-const LABEL_W = 72;
-const LANE_H = 44;
+const LABEL_W = 178;
+const laneHeight = (t:Track) => t.kind === "caption" || t.kind === "text" ? 26 : t.role === "overlay" ? 30 : t.kind === "video" ? 54 : 35;
 
 type DragMode =
   | { kind: "move"; clip: Clip; track: Track; dxMs: number; toTrackId: string | null }
@@ -58,7 +59,7 @@ export function Timeline({
   );
 
   const beginDrag = (mode: DragMode, e: React.PointerEvent) => {
-    if (readOnly) return;
+    if (readOnly || (mode.kind !== "playhead" && mode.track.locked)) return;
     dragStartX.current = e.clientX;
     dragRef.current = mode;
     setDrag(mode);
@@ -124,7 +125,7 @@ export function Timeline({
   };
 
   const ruler = () => {
-    const stepS = pxPerSec >= 60 ? 1 : pxPerSec >= 25 ? 5 : 10;
+    const stepS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find(s => s * pxPerSec >= 60) ?? Math.ceil(60 / pxPerSec);
     const marks = [];
     for (let s = 0; s * 1000 <= durationMs + 10_000; s += stepS) {
       marks.push(
@@ -155,7 +156,7 @@ export function Timeline({
 
   return (
     <div className="flex h-full flex-col border-t border-zinc-800 bg-zinc-950">
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1">
+      <div className="spine-timeline-heading flex items-center gap-2 border-b border-zinc-800 px-3 py-1">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           Timeline
         </h2>
@@ -165,6 +166,7 @@ export function Timeline({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
+          <button title="Fit timeline to window" onClick={() => onZoom(Math.max(0.01, ((scrollRef.current?.clientWidth ?? 900) - LABEL_W - 24) / Math.max(1, (edl?.project.duration_ms ?? 0) / 1000)))}>Fit</button>
           <button
             className="rounded bg-zinc-800 px-2 hover:bg-zinc-700"
             onClick={() => onZoom(pxPerSec / 1.5)}
@@ -172,7 +174,7 @@ export function Timeline({
           >
             −
           </button>
-          <span className="w-14 text-center text-[10px]">{Math.round(pxPerSec)} px/s</span>
+          <span className="w-14 text-center text-[10px]">{pxPerSec < 10 ? pxPerSec.toFixed(1) : Math.round(pxPerSec)} px/s</span>
           <button
             className="rounded bg-zinc-800 px-2 hover:bg-zinc-700"
             onClick={() => onZoom(pxPerSec * 1.5)}
@@ -195,23 +197,24 @@ export function Timeline({
         }}
         onPointerDown={(e) => {
           // Clicking empty timeline space: set playhead, clear selection.
-          if ((e.target as HTMLElement).closest("[data-clip-id]")) return;
+          if ((e.target as HTMLElement).closest("[data-clip-id],button")) return;
           onSelect(null);
           onPlayhead(xToMs(e.clientX));
           beginDrag({ kind: "playhead" }, e);
         }}
       >
         <div style={{ width: contentW + LABEL_W, minWidth: "100%" }}>
+          {(edl?.scenes?.length ?? 0) > 0 && <div className="flex h-7 border-b border-zinc-800 bg-zinc-900"><div className="sticky left-0 z-10 shrink-0 bg-zinc-900 px-3 py-1 text-[10px] text-zinc-500" style={{width: LABEL_W}}>STORY SPINE</div><div className="relative flex-1">{edl!.scenes!.map((s, i) => <button key={s.id} title={s.title} onClick={() => { onSelect(null); onPlayhead(s.start_ms); }} className={`absolute inset-y-0 truncate border-r border-zinc-800 px-2 text-left text-[10px] ${s.start_ms <= playheadMs && playheadMs < s.end_ms ? "bg-amber-500/20 text-amber-200" : "text-zinc-400"}`} style={{left:s.start_ms/msPerPx, width:(s.end_ms-s.start_ms)/msPerPx, background:`hsl(${i*45+25} 22% 17%)`, borderTop:`2px solid hsl(${i*45+25} 45% 55%)`}}>{s.approved ? "✓ " : ""}{i+1} · {s.title}</button>)}</div></div>}
           {/* ruler */}
           <div className="sticky top-0 z-20 flex h-6 bg-zinc-950">
-            <div className="sticky left-0 z-10 w-[72px] shrink-0 border-b border-r border-zinc-800 bg-zinc-950" />
+            <div className="sticky left-0 z-10 w-[178px] shrink-0 border-b border-r border-zinc-800 bg-zinc-950" />
             <div className="relative h-full flex-1 border-b border-zinc-800">{ruler()}</div>
           </div>
 
-          {(edl?.tracks ?? []).map((track) => (
-            <div key={track.id} className="flex" style={{ height: LANE_H }}>
-              <div className="sticky left-0 z-10 flex w-[72px] shrink-0 items-center border-b border-r border-zinc-800 bg-zinc-950 px-2 text-[10px] uppercase text-zinc-500">
-                {track.kind}
+          {[...(edl?.tracks ?? [])].sort((a,b) => (a.kind === "caption" ? 0 : a.role === "overlay" ? 1 : a.kind === "video" ? 2 : 3) - (b.kind === "caption" ? 0 : b.role === "overlay" ? 1 : b.kind === "video" ? 2 : 3)).map((track) => (
+            <div key={track.id} className="flex" data-role={track.role || track.kind} style={{ height: laneHeight(track) }}>
+              <div className="sticky left-0 z-10 flex w-[178px] shrink-0 items-center border-b border-r border-zinc-800 bg-zinc-950 px-2 text-[10px] uppercase text-zinc-500">
+                <span className="spine-track-label">{track.name || track.role && track.role !== "other" && track.role || track.kind}</span>{track.kind === "audio" ? <><button title={`Mute ${track.name || track.kind}`} aria-pressed={!!track.muted} disabled={readOnly || track.locked} onClick={() => onOps([{op:"set_track",track:track.id,muted:!track.muted}])}>M</button><button title={`Solo ${track.name || track.kind}`} aria-pressed={!!track.solo} disabled={readOnly || track.locked} onClick={() => onOps([{op:"set_track",track:track.id,solo:!track.solo}])}>S</button></> : <button title={`Hide ${track.name || track.kind}`} aria-pressed={!!track.muted} disabled={readOnly || track.locked} onClick={() => onOps([{op:"set_track",track:track.id,muted:!track.muted}])}><SpineIcon name={track.muted ? "x" : "eye"} size={13} /></button>}<button title={`${track.locked ? "Unlock" : "Lock"} ${track.name || track.kind}`} disabled={readOnly} onClick={() => onOps([{op:"set_track",track:track.id,locked:!track.locked}])}><SpineIcon name={track.locked ? "lock" : "unlock"} size={12} /></button>
               </div>
               <div
                 className="relative flex-1 border-b border-zinc-900"
@@ -225,7 +228,7 @@ export function Timeline({
                   return (
                     <div
                       key={clip.id}
-                      data-clip-id={clip.id}
+                      data-clip-id={clip.id} data-role={track.role || track.kind}
                       className={`absolute top-1 flex h-[36px] cursor-grab items-stretch overflow-hidden rounded border text-[10px] ${
                         selected
                           ? "clip-selected z-10 border-transparent bg-[var(--elevated)]"
@@ -236,8 +239,10 @@ export function Timeline({
                       style={{
                         left: clip.start_ms / msPerPx + dragOffsetPx(clip),
                         width: clipWidthPx(clip),
+                        top: 2, height: laneHeight(track)-4,
+                        "--scene-hue": (edl?.scenes?.findIndex(s => s.start_ms <= clip.start_ms && clip.start_ms < s.end_ms) ?? 0)*45+25,
                         touchAction: "none",
-                      }}
+                      } as React.CSSProperties}
                       onPointerDown={(e) => {
                         onSelect(clip.id);
                         beginDrag({ kind: "move", clip, track, dxMs: 0, toTrackId: null }, e);
@@ -318,11 +323,11 @@ export function Timeline({
 
           {/* playhead */}
           <div
-            className="pointer-events-none absolute bottom-0 top-6 z-30 w-px bg-red-500"
+            className="pointer-events-none absolute bottom-0 top-6 z-30 w-px bg-[var(--accent)]"
             data-testid="playhead"
             style={{ left: LABEL_W + playheadMs / msPerPx }}
           >
-            <div className="-ml-[5px] h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-red-500" />
+            <div className="-ml-[5px] h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-[var(--accent)]" />
           </div>
         </div>
       </div>

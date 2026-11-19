@@ -22,6 +22,7 @@ from .schema import (
     EDL,
     EffectRef,
     MediaClip,
+    Scene,
     Track,
     TrackKindT,
     Transform,
@@ -152,16 +153,19 @@ class AddTrack(_OpBase):
     op: Literal["add_track"]
     kind: TrackKindT
     index: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    role: Literal["footage", "overlay", "voiceover", "music", "sfx", "captions", "other"] | None = None
     id: str | None = Field(default=None, pattern=r"^trk_[a-z0-9]{2,12}$")
 
     def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         track_id = self.id or ids.new_track_id()
         if edl.find_track(track_id):
             raise OpError("E_DUP", "id", f"track {track_id} already exists")
-        track = Track(id=track_id, kind=self.kind, clips=[])
+        track = Track(id=track_id, kind=self.kind, clips=[],
+                      name=self.name or "", role=self.role or "other")
         idx = len(edl.tracks) if self.index is None else max(0, min(self.index, len(edl.tracks)))
         edl.tracks.insert(idx, track)
-        return f"add {self.kind} track {track_id}"
+        return f"add {self.role or self.kind} track {track_id}"
 
 
 class RemoveTrack(_OpBase):
@@ -183,6 +187,17 @@ class AddClip(_OpBase):
     start_ms: int = Field(ge=0)
     speed: float = Field(default=1.0, ge=0.1, le=10.0)
     gain_db: float = Field(default=0.0, ge=-60.0, le=12.0)
+    fade_in_ms: int = Field(default=0, ge=0, le=60_000)
+    fade_out_ms: int = Field(default=0, ge=0, le=60_000)
+    audio_denoise: bool = False
+    audio_low_cut_hz: int = Field(default=0, ge=0, le=1000)
+    audio_high_cut_hz: int = Field(default=0, ge=0, le=20_000)
+    audio_effect: Literal["none", "voice-enhance", "telephone", "echo"] = "none"
+    reversed: bool = False
+    freeze_frame_at_ms: int | None = Field(default=None, ge=0)
+    video_fade_in_ms: int = Field(default=0, ge=0, le=10_000)
+    video_fade_out_ms: int = Field(default=0, ge=0, le=10_000)
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     transform: Transform | None = None
     crop: Crop | None = None
     effects: list[EffectRef] = Field(default_factory=list)
@@ -200,6 +215,14 @@ class AddClip(_OpBase):
         clip = MediaClip(
             id=clip_id, asset=self.asset, in_ms=self.in_ms, out_ms=self.out_ms,
             start_ms=self.start_ms, speed=self.speed, gain_db=self.gain_db,
+            fade_in_ms=self.fade_in_ms, fade_out_ms=self.fade_out_ms,
+            audio_denoise=self.audio_denoise,
+            audio_low_cut_hz=self.audio_low_cut_hz,
+            audio_high_cut_hz=self.audio_high_cut_hz,
+            audio_effect=self.audio_effect,
+            reversed=self.reversed, freeze_frame_at_ms=self.freeze_frame_at_ms,
+            video_fade_in_ms=self.video_fade_in_ms,
+            video_fade_out_ms=self.video_fade_out_ms, opacity=self.opacity,
             transform=self.transform, crop=self.crop, effects=self.effects,
             transition_out=self.transition_out,
         )
@@ -332,6 +355,9 @@ class DeleteRange(_OpBase):
         for track in targets:
             removed += self._apply_track(track, length)
             _sort_and_check(track, "delete_range")
+        if self.ripple and {t.id for t in targets} == {t.id for t in edl.tracks}:
+            from .scenes import delete_scene_range
+            delete_scene_range(edl, self.from_ms, self.to_ms)
         scope = "all tracks" if self.tracks == "all" else ",".join(t.id for t in targets)
         return (f"delete range [{self.from_ms},{self.to_ms}]ms on {scope}"
                 f" ({removed} clips removed{', ripple' if self.ripple else ''})")
@@ -430,6 +456,309 @@ class SetGain(_OpBase):
         return f"set gain of {clip.id} to {self.gain_db}dB"
 
 
+class Duck(_OpBase):
+    """Lower a music track wherever voiceover clips are present.
+
+    The operation writes ordinary splits and clip gains into the EDL, so the
+    result stays visible, editable, undoable, and identical in preview/export.
+    """
+
+    op: Literal["duck"]
+    music_track: str
+    voice_track: str | None = None
+    gain_db: float = Field(default=-14.0, ge=-60.0, le=0.0)
+    padding_ms: int = Field(default=150, ge=0, le=5000)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        music = _track(edl, self.music_track)
+        if music.kind not in ("audio", "video"):
+            raise OpError("E_KIND", "music_track", "ducking requires an audio-capable music track")
+
+        if self.voice_track is not None:
+            voice_tracks = [_track(edl, self.voice_track)]
+            if voice_tracks[0].id == music.id:
+                raise OpError("E_RANGE", "voice_track", "voice and music tracks must be different")
+            if voice_tracks[0].kind not in ("audio", "video"):
+                raise OpError("E_KIND", "voice_track", "ducking requires an audio-capable voice track")
+        else:
+            voice_tracks = [
+                track for track in edl.tracks
+                if track.id != music.id and track.kind in ("audio", "video")
+                and track.role == "voiceover" and not track.muted
+            ]
+
+        intervals = sorted(
+            (max(0, clip.start_ms - self.padding_ms), clip.end_ms() + self.padding_ms)
+            for track in voice_tracks if not track.muted
+            for clip in track.clips if isinstance(clip, MediaClip)
+        )
+        if not intervals:
+            raise OpError("E_RANGE", "voice_track", "no voiceover clips are available to drive ducking")
+        merged: list[list[int]] = []
+        for start, end in intervals:
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+
+        changed = 0
+        originals = [clip for clip in list(music.clips) if isinstance(clip, MediaClip)]
+        for original in originals:
+            original_start, original_end = _clip_span(original)
+            boundaries = sorted({
+                point for start, end in merged for point in (start, end)
+                if original_start < point < original_end
+            })
+            piece_ids = {original.id}
+            original_fade_in, original_fade_out = original.fade_in_ms, original.fade_out_ms
+            for boundary in boundaries:
+                piece = next(
+                    clip for clip in music.clips
+                    if isinstance(clip, MediaClip) and clip.id in piece_ids
+                    and clip.start_ms < boundary < clip.end_ms()
+                )
+                new_id = ids.new_clip_id()
+                Split(op="split", clip=piece.id, at_ms=boundary, new_id=new_id).apply(edl, ctx)
+                piece_ids.add(new_id)
+            for piece_id in piece_ids:
+                piece = next(c for c in music.clips if c.id == piece_id)
+                piece.fade_in_ms = original_fade_in if piece.start_ms == original_start else 0
+                piece.fade_out_ms = original_fade_out if piece.end_ms() == original_end else 0
+                if any(piece.start_ms < end and piece.end_ms() > start for start, end in merged):
+                    piece.gain_db = self.gain_db
+                    changed += 1
+
+        if not changed:
+            raise OpError("E_RANGE", "music_track", "voiceover does not overlap any music clips")
+        _sort_and_check(music, "duck")
+        return f"duck {music.id} to {self.gain_db}dB under voiceover ({changed} regions)"
+
+
+class SetAudioFades(_OpBase):
+    op: Literal["set_audio_fades"]
+    clip: str
+    fade_in_ms: int = Field(ge=0, le=60_000)
+    fade_out_ms: int = Field(ge=0, le=60_000)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        _, clip = _media_clip(edl, self.clip)
+        if self.fade_in_ms + self.fade_out_ms > clip.timeline_len_ms():
+            raise OpError("E_RANGE", "fade", "audio fades cannot exceed the clip duration")
+        clip.fade_in_ms, clip.fade_out_ms = self.fade_in_ms, self.fade_out_ms
+        return f"set audio fades of {clip.id} to {self.fade_in_ms}/{self.fade_out_ms}ms"
+
+
+class SetAudioCleanup(_OpBase):
+    op: Literal["set_audio_cleanup"]
+    clip: str
+    denoise: bool = False
+    low_cut_hz: int = Field(default=0, ge=0, le=1000)
+    high_cut_hz: int = Field(default=0, ge=0, le=20_000)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        _, clip = _media_clip(edl, self.clip)
+        if self.low_cut_hz and self.high_cut_hz and self.low_cut_hz >= self.high_cut_hz:
+            raise OpError("E_RANGE", "audio_cleanup", "low cut must be below high cut")
+        clip.audio_denoise = self.denoise
+        clip.audio_low_cut_hz = self.low_cut_hz
+        clip.audio_high_cut_hz = self.high_cut_hz
+        return (f"set audio cleanup of {clip.id}: denoise={self.denoise}, "
+                f"low={self.low_cut_hz}Hz, high={self.high_cut_hz}Hz")
+
+
+class SetAudioEffect(_OpBase):
+    op: Literal["set_audio_effect"]
+    clip: str
+    effect: Literal["none", "voice-enhance", "telephone", "echo"]
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        _, clip = _media_clip(edl, self.clip)
+        clip.audio_effect = self.effect
+        return f"set audio effect of {clip.id} to {self.effect}"
+
+
+class SetVideoAnimation(_OpBase):
+    """Simple, deterministic enter/exit animation for any visual clip."""
+
+    op: Literal["set_video_animation"]
+    clip: str
+    fade_in_ms: int = Field(ge=0, le=10_000)
+    fade_out_ms: int = Field(ge=0, le=10_000)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video":
+            raise OpError("E_KIND", "clip", "visual animation targets video clips")
+        if self.fade_in_ms + self.fade_out_ms > clip.timeline_len_ms():
+            raise OpError("E_RANGE", "animation", "video fades cannot exceed the clip duration")
+        clip.video_fade_in_ms, clip.video_fade_out_ms = self.fade_in_ms, self.fade_out_ms
+        return f"set visual animation of {clip.id} to {self.fade_in_ms}/{self.fade_out_ms}ms"
+
+
+class SetTransitionOut(_OpBase):
+    op: Literal["set_transition_out"]
+    clip: str
+    transition_out: TransitionOut | None = None
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video":
+            raise OpError("E_KIND", "clip", "transitions can only be applied to video clips")
+        if self.transition_out is not None:
+            from .. import capabilities
+            if capabilities.get(self.transition_out.cap, "transition") is None:
+                raise OpError("E_REF", "transition_out", f"unknown transition {self.transition_out.cap}")
+        clip.transition_out = self.transition_out
+        return (f"set {self.transition_out.cap} transition on {clip.id}"
+                if self.transition_out else f"remove transition from {clip.id}")
+
+
+class SetReverse(_OpBase):
+    op: Literal["set_reverse"]
+    clip: str
+    reversed: bool
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        _, clip = _media_clip(edl, self.clip)
+        if edl.assets[clip.asset].kind == "image":
+            raise OpError("E_KIND", "clip", "still images cannot be reversed")
+        clip.reversed = self.reversed
+        return f"{'reverse' if self.reversed else 'restore forward'} {clip.id}"
+
+
+class SetFreezeFrame(_OpBase):
+    op: Literal["set_freeze_frame"]
+    clip: str
+    at_ms: int | None = Field(default=None, ge=0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video" or edl.assets[clip.asset].kind != "video":
+            raise OpError("E_KIND", "clip", "freeze frame targets video clips")
+        if self.at_ms is not None and not clip.in_ms <= self.at_ms < clip.out_ms:
+            raise OpError("E_RANGE", "at_ms", "freeze frame must be inside the clip source range")
+        clip.freeze_frame_at_ms = self.at_ms
+        return (f"freeze {clip.id} at {self.at_ms}ms" if self.at_ms is not None
+                else f"remove freeze frame from {clip.id}")
+
+
+class SnapToBeat(_OpBase):
+    """Move a clip's timeline start onto the nearest beat of an analyzed music clip."""
+
+    op: Literal["snap_to_beat"]
+    clip: str
+    beat_clip: str
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        target_track, target = _media_clip(edl, self.clip)
+        _, reference = _media_clip(edl, self.beat_clip)
+        if ctx is None:
+            raise OpError("E_NO_UNDERSTANDING", "beat_clip", "no op context available")
+        understanding = ctx.require_understanding(reference.asset)
+        candidates = [
+            reference.start_ms + round((beat - reference.in_ms) / reference.speed)
+            for beat in understanding.beats_ms
+            if reference.in_ms <= beat < reference.out_ms
+        ]
+        if not candidates:
+            raise OpError("E_NO_BEATS", "beat_clip", "no detected beats fall inside the reference clip")
+        snapped = min(candidates, key=lambda beat: (abs(beat - target.start_ms), beat))
+        target.start_ms = snapped
+        _sort_and_check(target_track, "snap_to_beat")
+        return f"snap {target.id} to beat at {snapped}ms"
+
+
+class SetOpacity(_OpBase):
+    op: Literal["set_opacity"]
+    clip: str
+    opacity: float = Field(ge=0.0, le=1.0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        _, clip = _media_clip(edl, self.clip)
+        clip.opacity = self.opacity
+        return f"set opacity of {clip.id} to {self.opacity:.2f}"
+
+
+class SetEffect(_OpBase):
+    """Add or update one named render effect on a video clip.
+
+    Effect references are intentionally keyed by capability id.  Reapplying an
+    adjustment updates it rather than silently stacking another copy of the
+    same filter on the clip.
+    """
+
+    op: Literal["set_effect"]
+    clip: str
+    cap: str = Field(min_length=1)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video":
+            raise OpError("E_KIND", "clip", "effects can only be applied to video clips")
+        from .. import capabilities
+        if capabilities.get(self.cap, "effect") is None:
+            raise OpError("E_REF", "cap", f"unknown effect capability {self.cap}")
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               for value in self.params.values()):
+            raise OpError("E_SCHEMA", "params", "effect parameters must be numbers")
+        effect = EffectRef(cap=self.cap, params=self.params)
+        for index, existing in enumerate(clip.effects):
+            if existing.cap == self.cap:
+                clip.effects[index] = effect
+                return f"update {self.cap} effect on {clip.id}"
+        clip.effects.append(effect)
+        return f"apply {self.cap} effect to {clip.id}"
+
+
+class RemoveEffect(_OpBase):
+    op: Literal["remove_effect"]
+    clip: str
+    cap: str = Field(min_length=1)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        if track.kind != "video":
+            raise OpError("E_KIND", "clip", "effects can only be removed from video clips")
+        before = len(clip.effects)
+        clip.effects = [effect for effect in clip.effects if effect.cap != self.cap]
+        if len(clip.effects) == before:
+            raise OpError("E_REF", "cap", f"effect {self.cap} is not applied to this clip")
+        return f"remove {self.cap} effect from {clip.id}"
+
+
+class ReplaceClip(_OpBase):
+    """Swap a clip's source while retaining its edit decisions and timing."""
+
+    op: Literal["replace_clip"]
+    clip: str
+    asset: str
+    in_ms: int | None = Field(default=None, ge=0)
+    out_ms: int | None = Field(default=None, gt=0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _media_clip(edl, self.clip)
+        replacement = edl.assets.get(self.asset)
+        if replacement is None:
+            raise OpError("E_REF", "asset", f"asset {self.asset} not found")
+        _asset_kind_ok(edl, self.asset, track, "asset")
+        original = edl.assets[clip.asset]
+        if replacement.kind != original.kind and not (
+            track.kind == "video" and {replacement.kind, original.kind} <= {"video", "image"}
+            and self.in_ms is not None and self.out_ms is not None
+        ):
+            raise OpError("E_KIND", "asset", "replacement must be the same media kind as the original")
+        tin = clip.in_ms if self.in_ms is None else self.in_ms
+        tout = clip.out_ms if self.out_ms is None else self.out_ms
+        if tout <= tin:
+            raise OpError("E_RANGE", "out_ms", "source end must follow source start")
+        if replacement.kind != "image" and replacement.duration_ms is not None and tout > replacement.duration_ms:
+            raise OpError("E_RANGE", "asset", "replacement is shorter than this clip's source range")
+        clip.asset = self.asset
+        clip.in_ms, clip.out_ms = tin, tout
+        return f"replace source of {clip.id} with {self.asset}"
+
+
 class SetTransform(_OpBase):
     op: Literal["set_transform"]
     clip: str
@@ -465,10 +794,20 @@ class SetCanvas(_OpBase):
 
     def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         try:
-            edl.project.canvas = Canvas(width=self.width, height=self.height, fps=self.fps)
+            edl.project.canvas = Canvas(width=self.width, height=self.height, fps=self.fps,
+                                        background_color=edl.project.canvas.background_color)
         except Exception as e:
             raise OpError("E_RANGE", "canvas", f"illegal canvas: {e}") from e
         return f"set canvas {self.width}x{self.height}@{self.fps}"
+
+
+class SetBackground(_OpBase):
+    op: Literal["set_background"]
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        edl.project.canvas.background_color = self.color
+        return f"set background {self.color}"
 
 
 class AddCaption(_OpBase):
@@ -501,6 +840,7 @@ class SetProject(_OpBase):
     op: Literal["set_project"]
     name: str | None = Field(default=None, min_length=1, max_length=120)
     profile: str | None = None
+    engine_source: dict[str, str] | None = None
 
     def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
         changes = []
@@ -510,6 +850,9 @@ class SetProject(_OpBase):
         if self.profile is not None:
             edl.project.profile = self.profile
             changes.append(f"profile='{self.profile}'")
+        if self.engine_source is not None:
+            edl.project.engine_source = self.engine_source
+            changes.append("engine source")
         return "set project " + (", ".join(changes) or "(no changes)")
 
 
@@ -618,6 +961,42 @@ class CaptionFromTranscript(_OpBase):
         return f"caption {self.asset} -> {len(plan)} caption(s) on {self.track}"
 
 
+class AutoLyrics(_OpBase):
+    """Create a dedicated, short-phrase lyric track from analyzed audio."""
+
+    op: Literal["auto_lyrics"]
+    asset: str = Field(pattern=r"^ast_[a-z0-9]{2,12}$")
+    track: str | None = None
+    max_words: int = Field(default=4, ge=1, le=8)
+    cap_style: Literal["karaoke", "bold-pop", "boxed", "default"] = "karaoke"
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from .smartops import plan_caption_from_transcript
+
+        if ctx is None:
+            raise OpError("E_NO_UNDERSTANDING", "asset", "no op context available")
+        u = ctx.require_understanding(self.asset)
+        created = self.track is None
+        track_id = self.track or ids.new_track_id()
+        if created:
+            edl.tracks.append(Track(
+                id=track_id, kind="caption", role="captions", name="Auto lyrics",
+            ))
+        else:
+            track = _track(edl, track_id)
+            if track.kind not in ("caption", "text"):
+                raise OpError("E_KIND", "track", "auto_lyrics targets caption/text tracks")
+        plan = plan_caption_from_transcript(
+            edl, u, self.asset, track_id, self.max_words, 350, self.cap_style,
+        )
+        if not plan:
+            if created:
+                edl.tracks = [track for track in edl.tracks if track.id != track_id]
+            raise OpError("E_RANGE", "asset", "no timed lyric words overlap this asset on the timeline")
+        _apply_primitive_ops(edl, plan, ctx)
+        return f"auto lyrics for {self.asset}: {len(plan)} phrase(s) on {track_id}"
+
+
 class Reframe(_OpBase):
     """Basic center reframe: change the canvas and center-crop affected video
     clips. The Phase-0 render already center-crops to the canvas aspect.
@@ -716,10 +1095,117 @@ class Compact(_OpBase):
                 f"({len(keep)} segment(s), target {self.target_ms}ms)")
 
 
+class SetClipTiming(_OpBase):
+    """Move and trim together, validating the final placement atomically."""
+    op: Literal["set_clip_timing"]
+    clip: str
+    start_ms: int = Field(ge=0)
+    in_ms: int = Field(ge=0)
+    out_ms: int = Field(gt=0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _clip(edl, self.clip)
+        if not isinstance(clip, MediaClip):
+            raise OpError("E_KIND", "clip", "Timing requires a media clip")
+        if self.out_ms <= self.in_ms:
+            raise OpError("E_RANGE", "out_ms", "Source out must follow source in")
+        clip.start_ms, clip.in_ms, clip.out_ms = self.start_ms, self.in_ms, self.out_ms
+        _sort_and_check(track, "set_clip_timing")
+        return f"set timing {self.clip}"
+
+
+class SetCaption(_OpBase):
+    op: Literal["set_caption"]
+    clip: str
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    text: str = Field(min_length=1)
+    cap_style: str | None = Field(default=None, min_length=1)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track, clip = _clip(edl, self.clip)
+        if not isinstance(clip, CaptionClip):
+            raise OpError("E_KIND", "clip", "Select a caption or text clip")
+        if self.end_ms <= self.start_ms:
+            raise OpError("E_RANGE", "end_ms", "Caption end must follow start")
+        clip.start_ms, clip.end_ms, clip.text = self.start_ms, self.end_ms, self.text
+        if self.cap_style is not None:
+            clip.cap_style = self.cap_style
+        _sort_and_check(track, "set_caption")
+        return f"set caption {self.clip}"
+
+
+class SetTrack(_OpBase):
+    op: Literal["set_track"]
+    track: str
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    role: Literal["footage", "overlay", "voiceover", "music", "sfx", "captions", "other"] | None = None
+    muted: bool | None = None
+    solo: bool | None = None
+    locked: bool | None = None
+    gain_db: float | None = Field(default=None, ge=-60, le=12)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        track = _track(edl, self.track)
+        values = self.model_dump(exclude_none=True, exclude={"op", "track"})
+        if track.kind not in ("video", "audio") and ("gain_db" in values or values.get("solo")):
+            raise OpError("E_KIND", "track", "Gain and solo require a media track")
+        for key, value in values.items():
+            setattr(track, key, value)
+        return f"set track {track.name or track.id}: {', '.join(values)}"
+
+
+class AddScene(_OpBase):
+    op: Literal["add_scene"]
+    title: str = Field(min_length=1, max_length=120)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    id: str | None = Field(default=None, pattern=r"^scn_[a-z0-9]{2,12}$")
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        if self.end_ms <= self.start_ms:
+            raise OpError("E_RANGE", "scene", "Scene end must be after start")
+        scene = Scene(id=self.id or ids.new_clip_id().replace("clp_", "scn_"),
+                      title=self.title, start_ms=self.start_ms, end_ms=self.end_ms)
+        if any(s.id == scene.id for s in edl.scenes):
+            raise OpError("E_DUP", "scene", "Scene id already exists")
+        edl.scenes.append(scene)
+        edl.scenes.sort(key=lambda s: s.start_ms)
+        return f"add scene {scene.title}"
+
+
+class SetScene(_OpBase):
+    op: Literal["set_scene"]
+    scene: str
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    approved: bool | None = None
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        scene = next((s for s in edl.scenes if s.id == self.scene), None)
+        if scene is None:
+            raise OpError("E_REF", "scene", "Scene not found")
+        if self.title is not None:
+            scene.title = self.title
+        if self.approved is not None:
+            scene.approved = self.approved
+        return f"{'approve' if self.approved else 'update'} scene {scene.title}"
+
+
+class MoveScene(_OpBase):
+    op: Literal["move_scene"]
+    scene: str
+    to_index: int = Field(ge=0)
+
+    def apply(self, edl: EDL, ctx: OpContext | None = None) -> str:
+        from .scenes import move_scene
+        move_scene(edl, self.scene, self.to_index)
+        return f"move scene {self.scene} to position {self.to_index + 1}"
+
+
 # -- later-phase ops: enum defined now, E_NOT_IMPLEMENTED on apply ------------
 
 LATER_PHASE_OPS = (
-    "duck", "denoise", "fade", "apply_effect", "add_transition",
+    "denoise", "fade", "apply_effect", "add_transition",
     "find", "apply_style", "reorder",
 )
 
@@ -735,9 +1221,10 @@ class LaterPhaseOp(_OpBase):
 Op = Annotated[
     Union[
         AddTrack, RemoveTrack, AddClip, RemoveClip, Trim, Split, Move,
-        DeleteRange, SetSpeed, SetGain, SetTransform, SetCrop, SetCanvas,
+        DeleteRange, SetSpeed, SetGain, Duck, SetAudioFades, SetAudioCleanup, SetAudioEffect, SetVideoAnimation, SetTransitionOut, SetReverse, SetFreezeFrame, SnapToBeat, SetOpacity, SetEffect, RemoveEffect, ReplaceClip, SetTransform, SetCrop, SetCanvas, SetBackground,
         AddCaption, SetProject, AddAsset, SetUnderstanding,
-        RemoveSilence, CaptionFromTranscript, Reframe, AddEmphasis, Compact,
+        RemoveSilence, CaptionFromTranscript, AutoLyrics, Reframe, AddEmphasis, Compact,
+        SetTrack, AddScene, SetScene, MoveScene, SetClipTiming, SetCaption,
         LaterPhaseOp,
     ],
     Field(discriminator="op"),

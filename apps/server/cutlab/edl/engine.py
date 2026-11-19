@@ -137,7 +137,10 @@ class Engine:
         summaries: list[str] = []
         try:
             for op in ops:
+                previous = working.model_copy(deep=True)
                 summaries.append(op.apply(working, ctx))
+                from .scenes import guard_and_review
+                guard_and_review(previous, working, op.op)
         except OpError as e:
             raise Rejected([Issue(e.code, e.path, e.message)]) from e
 
@@ -153,6 +156,9 @@ class Engine:
         summary = diff.summarize(summaries, before, working)
         now = utcnow()
         with self.db.transaction() as conn:
+            live_head = conn.execute("SELECT head_rev FROM projects WHERE id=?", (project_id,)).fetchone()["head_rev"]
+            if live_head != base_rev:
+                raise Conflict(head_rev=live_head, base_rev=base_rev)
             row = conn.execute(
                 "SELECT COALESCE(MAX(rev), 0) AS m FROM revisions WHERE project_id=?",
                 (project_id,),
@@ -209,6 +215,9 @@ class Engine:
             raise Conflict(head_rev=head, base_rev=row["parent_rev"] or -1)
         now = utcnow()
         with self.db.transaction() as conn:
+            live_head = conn.execute("SELECT head_rev FROM projects WHERE id=?", (project_id,)).fetchone()["head_rev"]
+            if live_head != row["parent_rev"]:
+                raise Conflict(head_rev=live_head, base_rev=row["parent_rev"] or -1)
             conn.execute(
                 "UPDATE revisions SET state='committed' WHERE project_id=? AND rev=?",
                 (project_id, rev),

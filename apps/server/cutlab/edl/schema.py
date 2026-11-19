@@ -32,6 +32,7 @@ class Canvas(Strict):
     width: int = Field(ge=16, le=7680)
     height: int = Field(ge=16, le=7680)
     fps: float
+    background_color: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
 
     @field_validator("width", "height")
     @classmethod
@@ -52,6 +53,7 @@ class Project(Strict):
     id: str = Field(pattern=PROJECT_ID_RE)
     name: str = Field(min_length=1, max_length=120)
     profile: str = "default"
+    engine_source: dict[str, str] | None = None
     canvas: Canvas
     duration_ms: int = Field(default=0, ge=0)  # derived; recomputed server-side
 
@@ -121,6 +123,17 @@ class MediaClip(Strict):
     start_ms: int = Field(ge=0)
     speed: float = Field(default=1.0, ge=0.1, le=10.0)
     gain_db: float = Field(default=0.0, ge=-60.0, le=12.0)
+    fade_in_ms: int = Field(default=0, ge=0, le=60_000)
+    fade_out_ms: int = Field(default=0, ge=0, le=60_000)
+    audio_denoise: bool = False
+    audio_low_cut_hz: int = Field(default=0, ge=0, le=1000)
+    audio_high_cut_hz: int = Field(default=0, ge=0, le=20_000)
+    audio_effect: Literal["none", "voice-enhance", "telephone", "echo"] = "none"
+    reversed: bool = False
+    freeze_frame_at_ms: int | None = Field(default=None, ge=0)
+    video_fade_in_ms: int = Field(default=0, ge=0, le=10_000)
+    video_fade_out_ms: int = Field(default=0, ge=0, le=10_000)
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     transform: Transform | None = None
     crop: Crop | None = None
     effects: list[EffectRef] = Field(default_factory=list)
@@ -130,6 +143,15 @@ class MediaClip(Strict):
     def _in_before_out(self) -> "MediaClip":
         if self.in_ms >= self.out_ms:
             raise ValueError("in_ms must be < out_ms")
+        if self.fade_in_ms + self.fade_out_ms > self.timeline_len_ms():
+            raise ValueError("audio fades cannot exceed the clip duration")
+        if (self.audio_low_cut_hz and self.audio_high_cut_hz
+                and self.audio_low_cut_hz >= self.audio_high_cut_hz):
+            raise ValueError("audio low cut must be below high cut")
+        if self.freeze_frame_at_ms is not None and not self.in_ms <= self.freeze_frame_at_ms < self.out_ms:
+            raise ValueError("freeze frame must be inside the clip source range")
+        if self.video_fade_in_ms + self.video_fade_out_ms > self.timeline_len_ms():
+            raise ValueError("video fades cannot exceed the clip duration")
         return self
 
     def timeline_len_ms(self) -> int:
@@ -171,6 +193,12 @@ Clip = Union[MediaClip, CaptionClip]
 class Track(Strict):
     id: str = Field(pattern=TRACK_ID_RE)
     kind: Literal["video", "audio", "caption", "text"]
+    name: str = Field(default="", max_length=80)
+    role: Literal["footage", "overlay", "voiceover", "music", "sfx", "captions", "other"] = "other"
+    muted: bool = False
+    solo: bool = False  # audio audition/export; does not hide other video layers
+    locked: bool = False
+    gain_db: float = Field(default=0, ge=-60, le=12)
     clips: list[Clip] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -184,11 +212,28 @@ class Track(Strict):
         return self
 
 
+class Scene(Strict):
+    """Explicit story range. Layers intersecting this range are its contents."""
+
+    id: str = Field(pattern=r"^scn_[a-z0-9]{2,12}$")
+    title: str = Field(min_length=1, max_length=120)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    approved: bool = False
+
+    @model_validator(mode="after")
+    def _range(self) -> "Scene":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("scene end must be after its start")
+        return self
+
+
 class EDL(Strict):
     edl_version: Literal["1.0"]
     project: Project
     assets: dict[str, Asset] = Field(default_factory=dict)
     tracks: list[Track] = Field(default_factory=list)
+    scenes: list[Scene] = Field(default_factory=list)
 
     @field_validator("assets")
     @classmethod
@@ -211,7 +256,7 @@ class EDL(Strict):
         return None
 
     def computed_duration_ms(self) -> int:
-        end = 0
+        end = max((s.end_ms for s in self.scenes), default=0)
         for t in self.tracks:
             for c in t.clips:
                 if isinstance(c, MediaClip):

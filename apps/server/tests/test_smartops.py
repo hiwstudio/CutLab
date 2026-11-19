@@ -241,6 +241,36 @@ def test_caption_from_transcript_wrong_track_kind(engine: Engine):
     assert exc.value.issues[0].code == "E_KIND"
 
 
+def test_auto_lyrics_creates_dedicated_short_phrase_track(engine: Engine):
+    seg = TranscriptSegment(
+        start_ms=0, end_ms=1800, text="we move through the night again",
+        words=words((0, 250, "we"), (250, 500, "move"), (500, 750, "through"),
+                    (750, 1000, "the"), (1000, 1350, "night"),
+                    (1350, 1800, "again")),
+    )
+    pid = _project_with_analyzed_asset(engine, understanding_with(segments=[seg]))
+    result = engine.apply(pid, engine.get_project(pid)["head_rev"], [{
+        "op": "auto_lyrics", "asset": "ast_v1", "max_words": 3,
+    }])
+    lyrics = next(track for track in result["edl"]["tracks"] if track["name"] == "Auto lyrics")
+    assert lyrics["kind"] == "caption" and lyrics["role"] == "captions"
+    assert [clip["text"] for clip in lyrics["clips"]] == [
+        "we move through", "the night again",
+    ]
+    assert all(clip["cap_style"] == "karaoke" for clip in lyrics["clips"])
+
+
+def test_auto_lyrics_requires_timed_asset_on_timeline(engine: Engine):
+    seg = TranscriptSegment(start_ms=0, end_ms=200, text="sing",
+                            words=words((0, 200, "sing")))
+    pid = _project_with_analyzed_asset(engine, understanding_with(segments=[seg]), clip=False)
+    with pytest.raises(Rejected) as exc:
+        engine.apply(pid, engine.get_project(pid)["head_rev"], [
+            {"op": "auto_lyrics", "asset": "ast_v1"},
+        ])
+    assert exc.value.issues[0].path == "asset"
+
+
 # -- reframe ------------------------------------------------------------------
 
 
@@ -251,7 +281,10 @@ def test_reframe_op(engine: Engine):
     r = engine.apply(pid, head, [
         {"op": "reframe", "width": 1080, "height": 1920},
     ])
-    assert r["edl"]["project"]["canvas"] == {"width": 1080, "height": 1920, "fps": 30.0}
+    assert r["edl"]["project"]["canvas"] == {
+        "width": 1080, "height": 1920, "fps": 30.0,
+        "background_color": "#000000",
+    }
     clip = clips_on(r["edl"], "trk_v1")[0]
     assert clip["crop"]["mode"] == "center"
     assert "reframe to 1080x1920" in r["summary"]
@@ -263,6 +296,39 @@ def test_reframe_rejects_illegal_canvas(engine: Engine):
     with pytest.raises(Rejected):
         engine.apply(pid, engine.get_project(pid)["head_rev"],
                      [{"op": "reframe", "width": 1081, "height": 1920}])  # odd width
+
+
+def test_snap_to_beat_uses_analyzed_reference_clip(engine: Engine):
+    u = understanding_with(silence=[])
+    u.beats_ms = [1000, 2000, 3000, 4000, 5000]
+    pid = _project_with_analyzed_asset(engine, u)
+    head = engine.get_project(pid)["head_rev"]
+    engine.apply(pid, head, [
+        {"op": "add_track", "kind": "audio", "id": "trk_music"},
+        {"op": "add_clip", "track": "trk_music", "asset": "ast_v1", "in_ms": 0,
+         "out_ms": 10000, "start_ms": 0, "id": "clp_music"},
+        {"op": "move", "clip": "clp_a1", "to_start_ms": 4300},
+    ])
+    result = engine.apply(pid, engine.get_project(pid)["head_rev"], [
+        {"op": "snap_to_beat", "clip": "clp_a1", "beat_clip": "clp_music"},
+    ])
+    assert clips_on(result["edl"], "trk_v1")[0]["start_ms"] == 4000
+
+
+def test_snap_to_beat_requires_analyzed_beats(engine: Engine):
+    u = understanding_with(silence=[])
+    pid = _project_with_analyzed_asset(engine, u)
+    head = engine.get_project(pid)["head_rev"]
+    engine.apply(pid, head, [
+        {"op": "add_track", "kind": "audio", "id": "trk_music"},
+        {"op": "add_clip", "track": "trk_music", "asset": "ast_v1", "in_ms": 0,
+         "out_ms": 10000, "start_ms": 0, "id": "clp_music"},
+    ])
+    with pytest.raises(Rejected) as exc:
+        engine.apply(pid, engine.get_project(pid)["head_rev"], [
+            {"op": "snap_to_beat", "clip": "clp_a1", "beat_clip": "clp_music"},
+        ])
+    assert exc.value.issues[0].code == "E_NO_BEATS"
 
 
 @pytest.mark.slow
@@ -364,7 +430,7 @@ def test_add_emphasis_no_saliency_errors(engine: Engine):
 def test_still_later_phase_ops_rejected(engine: Engine):
     u = understanding_with(silence=[])
     pid = _project_with_analyzed_asset(engine, u)
-    for op in ("reorder", "duck", "find", "apply_style"):
+    for op in ("reorder", "find", "apply_style"):
         with pytest.raises(Rejected) as exc:
             engine.apply(pid, engine.get_project(pid)["head_rev"], [{"op": op}])
         assert exc.value.issues[0].code == "E_NOT_IMPLEMENTED"

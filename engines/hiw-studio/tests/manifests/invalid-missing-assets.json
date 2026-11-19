@@ -1,0 +1,31 @@
+{
+  "projectId": "invalid-missing-assets",
+  "title": "Invalid — Missing Assets",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "scenes": [
+    {
+      "id": "scene_001",
+      "voiceover": "Uses assets that do not exist.",
+      "start": 0,
+      "end": 5,
+      "background": "spaceship",
+      "characters": [
+        { "id": "alien", "position": "center", "expression": "neutral", "motion": "explodeIntoPanic" }
+      ],
+      "props": [{ "id": "ray_gun", "position": "left" }],
+      "caption": { "text": "This should fail validation.", "style": "hiw_default" }
+    },
+    {
+      "id": "scene_002",
+      "voiceover": "End time is before start time.",
+      "start": 10,
+      "end": 8,
+      "background": "office",
+      "characters": [
+        { "id": "human", "position": "center", "expression": "happy", "motion": "idle" }
+      ],
+      "caption": { "text": "Bad timing here.", "style": "hiw_default" }
+    }
+  ]
+}

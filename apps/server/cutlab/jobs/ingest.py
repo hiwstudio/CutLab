@@ -88,6 +88,15 @@ def ingest_handler(ctx: JobContext) -> None:
         if kind in ("audio", "video"):
             peaks_file = paths.peaks_path(project_dir, asset_id)
             ctx.run_stage("waveform", lambda: _waveform(src, peaks_file, info))
+            if info.duration_ms is None and info.has_audio:
+                peaks = json.loads(peaks_file.read_text(encoding="utf-8"))
+                info.duration_ms = peaks.get("duration_ms") or _decoded_audio_duration_ms(src)
+                if info.duration_ms <= 0:
+                    raise RuntimeError("decoded audio has no measurable duration")
+                db.execute(
+                    "UPDATE assets SET duration_ms=? WHERE project_id=? AND asset_id=?",
+                    (info.duration_ms, project_id, asset_id),
+                )
         ctx.set_progress(0.75)
 
         # Stage 4: thumbnails (video only): 1 frame / 5s, 160px wide.
@@ -174,8 +183,24 @@ def _waveform(src: Path, peaks_file: Path, info: ProbeResult) -> str:
         pad = math.ceil(samples.size / n) * n - samples.size
         padded = np.pad(np.abs(samples.astype(np.int32)), (0, pad))
         buckets = (padded.reshape(n, -1).max(axis=1) / 32768.0).round(4).tolist()
-    peaks_file.write_text(json.dumps({"buckets": buckets, "rate": WAVEFORM_RATE}))
+    duration_ms = int(round(samples.size * 1000 / WAVEFORM_RATE))
+    peaks_file.write_text(json.dumps({
+        "buckets": buckets, "rate": WAVEFORM_RATE, "duration_ms": duration_ms,
+    }))
     return str(peaks_file)
+
+
+def _decoded_audio_duration_ms(src: Path) -> int:
+    """Measure duration by decoding when WebM omits container duration metadata."""
+    cmd = [
+        config.FFMPEG, "-hide_banner", "-v", "error", "-i", str(src),
+        "-map", "a:0", "-ac", "1", "-ar", str(WAVEFORM_RATE), "-f", "s16le", "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, timeout=1800)
+    if proc.returncode != 0:
+        raise RuntimeError(f"audio duration decode failed: {proc.stderr[-500:].decode(errors='replace')}")
+    sample_count = len(proc.stdout) // 2
+    return int(round(sample_count * 1000 / WAVEFORM_RATE))
 
 
 def _register_in_edl(

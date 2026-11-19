@@ -357,7 +357,9 @@ def test_set_canvas_and_project(engine: Engine, project: str):
         {"op": "set_canvas", "width": 1080, "height": 1920, "fps": 60},
         {"op": "set_project", "name": "Renamed", "profile": "tiktok"},
     ])
-    assert r["edl"]["project"]["canvas"] == {"width": 1080, "height": 1920, "fps": 60.0}
+    assert r["edl"]["project"]["canvas"] == {
+        "width": 1080, "height": 1920, "fps": 60.0, "background_color": "#000000",
+    }
     assert r["edl"]["project"]["name"] == "Renamed"
     assert engine.get_project(project)["name"] == "Renamed"
     with pytest.raises(Rejected):
@@ -398,7 +400,7 @@ def test_set_understanding(engine: Engine, project: str):
 def test_later_phase_ops_not_implemented(engine: Engine, project: str):
     # remove_silence / caption_from_transcript / reframe are implemented in P2;
     # these remain later-phase.
-    for op in ("reorder", "duck", "find", "apply_style", "fade"):
+    for op in ("reorder", "find", "apply_style", "fade"):
         with pytest.raises(Rejected) as exc:
             apply(engine, project, [{"op": op}])
         assert exc.value.issues[0].code == "E_NOT_IMPLEMENTED"

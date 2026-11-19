@@ -75,6 +75,13 @@ def test_transcribe_handles_missing_word_timings():
     assert tr.word_count() == 0
 
 
+def test_transcribe_passes_selected_language_to_whisper():
+    model = FakeModel([], FakeInfo(language="es"))
+    tr = transcribe_audio("x.wav", load_model=lambda: model, language="es")
+    assert tr.language == "es"
+    assert model.calls[0]["language"] == "es"
+
+
 def test_no_speech_prob_clamped():
     seg = FakeSegment(start=0.0, end=1.0, text="x", words=[], no_speech_prob=1.7)
     tr = transcribe_audio("x.wav", load_model=lambda: FakeModel([seg], FakeInfo()))

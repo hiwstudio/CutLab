@@ -1,0 +1,560 @@
+{
+ "scene_022": {
+  "durMs": 9080,
+  "text": "It is worth being precise about what is doing all of this. Voyager 1 carries three computers holding, between them, about 70 kilobytes of memory.",
+  "words": [
+   {
+    "t": "It",
+    "ms": 0
+   },
+   {
+    "t": "is",
+    "ms": 140
+   },
+   {
+    "t": "worth",
+    "ms": 280
+   },
+   {
+    "t": "being",
+    "ms": 500
+   },
+   {
+    "t": "precise",
+    "ms": 760
+   },
+   {
+    "t": "about",
+    "ms": 1180
+   },
+   {
+    "t": "what",
+    "ms": 1460
+   },
+   {
+    "t": "is",
+    "ms": 1660
+   },
+   {
+    "t": "doing",
+    "ms": 1860
+   },
+   {
+    "t": "all",
+    "ms": 2080
+   },
+   {
+    "t": "of",
+    "ms": 2380
+   },
+   {
+    "t": "this.",
+    "ms": 2480
+   },
+   {
+    "t": "Voyager",
+    "ms": 3560
+   },
+   {
+    "t": "1",
+    "ms": 4100
+   },
+   {
+    "t": "carries",
+    "ms": 4420
+   },
+   {
+    "t": "three",
+    "ms": 4860
+   },
+   {
+    "t": "computers",
+    "ms": 5200
+   },
+   {
+    "t": "holding,",
+    "ms": 5760
+   },
+   {
+    "t": "between",
+    "ms": 6440
+   },
+   {
+    "t": "them,",
+    "ms": 6700
+   },
+   {
+    "t": "about",
+    "ms": 7300
+   },
+   {
+    "t": "70",
+    "ms": 7500
+   },
+   {
+    "t": "kilobytes",
+    "ms": 8000
+   },
+   {
+    "t": "of",
+    "ms": 8560
+   },
+   {
+    "t": "memory.",
+    "ms": 8720
+   }
+  ]
+ },
+ "scene_024": {
+  "durMs": 3920,
+  "text": "The code is assembly, written by hand, in the 1970s.",
+  "words": [
+   {
+    "t": "The",
+    "ms": 0
+   },
+   {
+    "t": "code",
+    "ms": 120
+   },
+   {
+    "t": "is",
+    "ms": 420
+   },
+   {
+    "t": "assembly,",
+    "ms": 680
+   },
+   {
+    "t": "written",
+    "ms": 1500
+   },
+   {
+    "t": "by",
+    "ms": 1700
+   },
+   {
+    "t": "hand,",
+    "ms": 1940
+   },
+   {
+    "t": "in",
+    "ms": 2620
+   },
+   {
+    "t": "the",
+    "ms": 2780
+   },
+   {
+    "t": "1970s.",
+    "ms": 2860
+   }
+  ]
+ },
+ "scene_032": {
+  "durMs": 11760,
+  "text": "But nothing came back that anyone could read, which meant the engineers were blind. The only instrument you have for diagnosing a broken spacecraft is the data it sends you. And that was precisely what had failed.",
+  "words": [
+   {
+    "t": "But",
+    "ms": 0
+   },
+   {
+    "t": "nothing",
+    "ms": 300
+   },
+   {
+    "t": "came",
+    "ms": 520
+   },
+   {
+    "t": "back",
+    "ms": 820
+   },
+   {
+    "t": "that",
+    "ms": 1160
+   },
+   {
+    "t": "anyone",
+    "ms": 1380
+   },
+   {
+    "t": "could",
+    "ms": 1640
+   },
+   {
+    "t": "read,",
+    "ms": 1920
+   },
+   {
+    "t": "which",
+    "ms": 2660
+   },
+   {
+    "t": "meant",
+    "ms": 2840
+   },
+   {
+    "t": "the",
+    "ms": 3020
+   },
+   {
+    "t": "engineers",
+    "ms": 3200
+   },
+   {
+    "t": "were",
+    "ms": 3620
+   },
+   {
+    "t": "blind.",
+    "ms": 3820
+   },
+   {
+    "t": "The",
+    "ms": 4880
+   },
+   {
+    "t": "only",
+    "ms": 5000
+   },
+   {
+    "t": "instrument",
+    "ms": 5200
+   },
+   {
+    "t": "you",
+    "ms": 5640
+   },
+   {
+    "t": "have",
+    "ms": 5880
+   },
+   {
+    "t": "for",
+    "ms": 6100
+   },
+   {
+    "t": "diagnosing",
+    "ms": 6280
+   },
+   {
+    "t": "a",
+    "ms": 6860
+   },
+   {
+    "t": "broken",
+    "ms": 7020
+   },
+   {
+    "t": "spacecraft",
+    "ms": 7280
+   },
+   {
+    "t": "is",
+    "ms": 7920
+   },
+   {
+    "t": "the",
+    "ms": 8460
+   },
+   {
+    "t": "data",
+    "ms": 8600
+   },
+   {
+    "t": "it",
+    "ms": 8880
+   },
+   {
+    "t": "sends",
+    "ms": 9080
+   },
+   {
+    "t": "you.",
+    "ms": 9300
+   },
+   {
+    "t": "And",
+    "ms": 10000
+   },
+   {
+    "t": "that",
+    "ms": 10180
+   },
+   {
+    "t": "was",
+    "ms": 10360
+   },
+   {
+    "t": "precisely",
+    "ms": 10500
+   },
+   {
+    "t": "what",
+    "ms": 11000
+   },
+   {
+    "t": "had",
+    "ms": 11300
+   },
+   {
+    "t": "failed.",
+    "ms": 11420
+   }
+  ]
+ },
+ "scene_035": {
+  "durMs": 10280,
+  "text": "In March 2024, they sent what they called a poke, a command that simply told the computer to run its software differently, in the hope that something readable might fall out.",
+  "words": [
+   {
+    "t": "In",
+    "ms": 0
+   },
+   {
+    "t": "March",
+    "ms": 260
+   },
+   {
+    "t": "2024,",
+    "ms": 540
+   },
+   {
+    "t": "they",
+    "ms": 1780
+   },
+   {
+    "t": "sent",
+    "ms": 2000
+   },
+   {
+    "t": "what",
+    "ms": 2240
+   },
+   {
+    "t": "they",
+    "ms": 2400
+   },
+   {
+    "t": "called",
+    "ms": 2580
+   },
+   {
+    "t": "a",
+    "ms": 2860
+   },
+   {
+    "t": "poke,",
+    "ms": 3040
+   },
+   {
+    "t": "a",
+    "ms": 3800
+   },
+   {
+    "t": "command",
+    "ms": 3940
+   },
+   {
+    "t": "that",
+    "ms": 4280
+   },
+   {
+    "t": "simply",
+    "ms": 4500
+   },
+   {
+    "t": "told",
+    "ms": 4820
+   },
+   {
+    "t": "the",
+    "ms": 5060
+   },
+   {
+    "t": "computer",
+    "ms": 5240
+   },
+   {
+    "t": "to",
+    "ms": 5680
+   },
+   {
+    "t": "run",
+    "ms": 6080
+   },
+   {
+    "t": "its",
+    "ms": 6280
+   },
+   {
+    "t": "software",
+    "ms": 6440
+   },
+   {
+    "t": "differently,",
+    "ms": 6880
+   },
+   {
+    "t": "in",
+    "ms": 7840
+   },
+   {
+    "t": "the",
+    "ms": 8060
+   },
+   {
+    "t": "hope",
+    "ms": 8160
+   },
+   {
+    "t": "that",
+    "ms": 8420
+   },
+   {
+    "t": "something",
+    "ms": 8580
+   },
+   {
+    "t": "readable",
+    "ms": 8880
+   },
+   {
+    "t": "might",
+    "ms": 9280
+   },
+   {
+    "t": "fall",
+    "ms": 9640
+   },
+   {
+    "t": "out.",
+    "ms": 9900
+   }
+  ]
+ },
+ "scene_041": {
+  "durMs": 10040,
+  "text": "On the 20th of April, Voyager 1 reported in. Readable for the first time in five months. By June, all four of its surviving instruments were returning science again.",
+  "words": [
+   {
+    "t": "On",
+    "ms": 0
+   },
+   {
+    "t": "the",
+    "ms": 120
+   },
+   {
+    "t": "20th",
+    "ms": 200
+   },
+   {
+    "t": "of",
+    "ms": 680
+   },
+   {
+    "t": "April,",
+    "ms": 740
+   },
+   {
+    "t": "Voyager",
+    "ms": 1380
+   },
+   {
+    "t": "1",
+    "ms": 1680
+   },
+   {
+    "t": "reported",
+    "ms": 1920
+   },
+   {
+    "t": "in.",
+    "ms": 2380
+   },
+   {
+    "t": "Readable",
+    "ms": 3400
+   },
+   {
+    "t": "for",
+    "ms": 3800
+   },
+   {
+    "t": "the",
+    "ms": 4120
+   },
+   {
+    "t": "first",
+    "ms": 4260
+   },
+   {
+    "t": "time",
+    "ms": 4480
+   },
+   {
+    "t": "in",
+    "ms": 4780
+   },
+   {
+    "t": "five",
+    "ms": 4960
+   },
+   {
+    "t": "months.",
+    "ms": 5220
+   },
+   {
+    "t": "By",
+    "ms": 6320
+   },
+   {
+    "t": "June,",
+    "ms": 6500
+   },
+   {
+    "t": "all",
+    "ms": 7040
+   },
+   {
+    "t": "four",
+    "ms": 7200
+   },
+   {
+    "t": "of",
+    "ms": 7420
+   },
+   {
+    "t": "its",
+    "ms": 7560
+   },
+   {
+    "t": "surviving",
+    "ms": 7700
+   },
+   {
+    "t": "instruments",
+    "ms": 8020
+   },
+   {
+    "t": "were",
+    "ms": 8620
+   },
+   {
+    "t": "returning",
+    "ms": 8880
+   },
+   {
+    "t": "science",
+    "ms": 9300
+   },
+   {
+    "t": "again.",
+    "ms": 9700
+   }
+  ]
+ }
+}

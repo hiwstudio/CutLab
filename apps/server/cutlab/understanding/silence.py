@@ -1,6 +1,6 @@
 """Silence detection + active-range derivation (P1).
 
-Adapted from the owner's viral-clip-engine `engine/silence.py`. P1 only *detects*
+Adapted from the bundled Viral Clip Engine's `engine/silence.py`. P1 only *detects*
 and exposes silence as data (spans + the complementary active/spoken ranges);
 actually removing silence is the P2 `remove_silence` op. The active-range
 padding/merge logic is carried over so a later cut has clean boundaries.

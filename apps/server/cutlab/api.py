@@ -78,6 +78,17 @@ class RenderIn(BaseModel):
     output: str | None = None
 
 
+class EngineImportIn(BaseModel):
+    source_project: str = Field(min_length=1, max_length=64)
+    mode: str = "mix"
+    canvas: CanvasIn
+
+
+class EngineSceneIn(BaseModel):
+    base_rev: int
+    note: str = Field(default="", max_length=4000)
+
+
 class AppState:
     def __init__(self, data_dir: Path, start_worker: bool = True):
         self.data_dir = data_dir
@@ -94,6 +105,16 @@ class AppState:
         self.worker.register("understanding", understanding_handler)
         self.worker.register("compaction", compaction_handler)
         self.worker.register("recap", recap_handler)
+        from .jobs.cutout import cutout_handler
+        self.worker.register("cutout", cutout_handler)
+        from .jobs.extract_audio import extract_audio_handler
+        self.worker.register("extract_audio", extract_audio_handler)
+        from .jobs.text_to_sound import text_to_sound_handler
+        self.worker.register("text_to_sound", text_to_sound_handler)
+        from .jobs.engine_import import engine_import_handler, engine_refresh_handler, engine_request_handler
+        self.worker.register("engine_import", engine_import_handler)
+        self.worker.register("engine_refresh", engine_refresh_handler)
+        self.worker.register("engine_request", engine_request_handler)
         # Director backend is chosen from config; fall back to manual if an
         # automatic backend is configured without its key. Swappable in tests.
         from .director.backends import ManualBackend, make_backend
@@ -177,6 +198,77 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
     @api.get("/projects/{project_id}/edl")
     async def get_edl(project_id: str, rev: int | None = None):
         return state.engine.get_edl(project_id, rev)
+
+    # -- production engines --------------------------------------------------
+
+    @api.get("/engines/mixfix/projects")
+    async def mixfix_projects():
+        from .integrations.mixfix import discover
+        return discover()
+
+    @api.post("/engines/mixfix/import")
+    async def import_mixfix(body: EngineImportIn):
+        from .integrations.mixfix import snapshot
+        from .edl.schema import Canvas
+        try:
+            canvas = Canvas(**body.canvas.model_dump()).model_dump()
+            manifest = await asyncio.to_thread(snapshot, body.source_project, body.mode, canvas)
+        except (ValueError, OSError, KeyError) as exc:
+            return error_response(422, "E_ENGINE_SOURCE", str(exc))
+        project = state.engine.create_project(f"MixFix · {body.source_project}", canvas)
+        project_dir = state.projects_dir / project["id"]
+        paths.ensure_project_layout(project_dir)
+        job_id = state.queue.enqueue("engine_import", {"project_id": project["id"],
+            "project_dir": str(project_dir), "manifest": manifest}, project["id"])
+        return {"project_id": project["id"], "job_id": job_id, "warnings": manifest["warnings"]}
+
+    def engine_link(project_id: str, rev: int | None = None):
+        from .integrations.mixfix import read_json
+        edl = state.engine.get_edl(project_id, rev)
+        source = edl["project"].get("engine_source")
+        if not source or source.get("engine") != "mixfix":
+            raise NotFound("This project has no MixFix connection")
+        link = read_json(paths.safe_join(state.projects_dir / project_id, source["link"]))
+        return source, link
+
+    @api.get("/projects/{project_id}/engine-link")
+    async def get_engine_link(project_id: str, rev: int | None = None):
+        source, link = engine_link(project_id, rev)
+        requests = state.db.query("SELECT id,state,input_json FROM jobs WHERE project_id=? AND kind='engine_request' ORDER BY rowid DESC", (project_id,))
+        return {"source": source, **link, "requests": [
+            {"id": r["id"], "state": "awaiting_operator" if r["state"] == "done" else r["state"],
+             "scene_id": json.loads(r["input_json"])["scene_id"], "note": json.loads(r["input_json"])["note"]} for r in requests]}
+
+    async def enqueue_scene(project_id: str, scene_id: str, body: EngineSceneIn, kind: str):
+        async with state.locks[project_id]:
+            head = state.engine.get_project(project_id)["head_rev"]
+            if body.base_rev != head:
+                raise Conflict(head, body.base_rev)
+            _, link = engine_link(project_id)
+            if scene_id not in link["scenes"]:
+                return error_response(422, "E_ENGINE_SCENE", "This scene has no imported visual to update")
+            job_id = state.queue.enqueue(kind, {"project_id": project_id,
+                "project_dir": str(state.projects_dir / project_id), "scene_id": scene_id,
+                "base_rev": head, "note": body.note}, project_id)
+            return {"job_id": job_id}
+
+    @api.post("/projects/{project_id}/engine-scenes/{scene_id}/refresh")
+    async def refresh_engine_scene(project_id: str, scene_id: str, body: EngineSceneIn):
+        return await enqueue_scene(project_id, scene_id, body, "engine_refresh")
+
+    @api.post("/projects/{project_id}/engine-scenes/{scene_id}/request")
+    async def request_engine_scene(project_id: str, scene_id: str, body: EngineSceneIn):
+        if not body.note.strip():
+            return error_response(422, "E_ENGINE_REQUEST", "Describe the new visual you want")
+        return await enqueue_scene(project_id, scene_id, body, "engine_request")
+
+    @api.get("/projects/{project_id}/engine-requests/{job_id}")
+    async def download_engine_request(project_id: str, job_id: str):
+        job = state.queue.get(job_id)
+        if not job or job["project_id"] != project_id or job["kind"] != "engine_request" or job["state"] != "done":
+            raise NotFound("Completed regeneration request not found")
+        return FileResponse(paths.safe_join(state.projects_dir / project_id, f"integration/{job_id}_request.json"),
+                            media_type="application/json", filename=f"mixfix-{job_id}.json")
 
     @api.post("/projects/{project_id}/apply")
     async def apply(project_id: str, body: ApplyIn):
@@ -269,7 +361,9 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
         media = paths.media_dir(project_dir)
         media.mkdir(parents=True, exist_ok=True)
 
+        upload_content_type: str | None = None
         if file is not None:
+            upload_content_type = file.content_type
             filename = Path(file.filename or "upload.bin").name
             dest = _unique_path(media / filename)
             with dest.open("wb") as f:
@@ -288,6 +382,10 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
             await asyncio.to_thread(shutil.copy2, src, dest)
 
         kind = MEDIA_EXT_KIND.get(dest.suffix.lower())
+        # WebM is a container used by both camera video and browser microphone
+        # recordings. Multipart uploads carry the distinction explicitly.
+        if upload_content_type and upload_content_type.lower().startswith("audio/"):
+            kind = "audio"
         if kind is None:
             dest.unlink(missing_ok=True)
             return error_response(422, "E_VALIDATION",
@@ -317,10 +415,94 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
         )
         return rows
 
+    @api.get("/sound-library")
+    async def sound_library():
+        from .sound_library import catalog
+        return catalog()
+
+    @api.get("/sound-library/{sound_id}/preview")
+    async def preview_library_sound(sound_id: str):
+        from .sound_library import path_for
+        try:
+            source = path_for(sound_id)
+        except KeyError:
+            return error_response(404, "E_NOT_FOUND", "sound not found")
+        if not source.is_file():
+            return error_response(404, "E_NOT_FOUND", "sound file is unavailable")
+        return FileResponse(source)
+
+    @api.post("/projects/{project_id}/sound-library/{sound_id}")
+    async def import_library_sound(project_id: str, sound_id: str):
+        state.engine.get_project(project_id)
+        from .sound_library import path_for
+        try:
+            source = path_for(sound_id)
+        except KeyError:
+            return error_response(404, "E_NOT_FOUND", "sound not found")
+        if not source.is_file():
+            return error_response(404, "E_NOT_FOUND", "sound file is unavailable")
+        project_dir = state.projects_dir / project_id
+        media = paths.media_dir(project_dir)
+        media.mkdir(parents=True, exist_ok=True)
+        dest = _unique_path(media / source.name)
+        await asyncio.to_thread(shutil.copy2, source, dest)
+        asset_id = new_asset_id()
+        src_rel = f"media/{dest.name}"
+        state.db.execute(
+            "INSERT INTO assets (project_id, asset_id, kind, src, status)"
+            " VALUES (?, ?, 'audio', ?, 'ingesting')",
+            (project_id, asset_id, src_rel),
+        )
+        job_id = state.queue.enqueue("ingest", {
+            "project_id": project_id, "asset_id": asset_id, "kind": "audio",
+            "src": src_rel, "project_dir": str(project_dir),
+        }, project_id=project_id)
+        return {"asset_id": asset_id, "kind": "audio", "src": src_rel,
+                "status": "ingesting", "job_id": job_id}
+
+    @api.post("/projects/{project_id}/assets/{asset_id}/cutout")
+    async def cutout_asset(project_id: str, asset_id: str):
+        row = state.db.query_one("SELECT kind,status FROM assets WHERE project_id=? AND asset_id=?", (project_id, asset_id))
+        if not row or row["kind"] != "image" or row["status"] != "ready":
+            return error_response(422, "E_NOT_READY", "choose a ready image asset")
+        from .util.ids import new_asset_id
+        output_asset_id = new_asset_id()
+        job_id = state.queue.enqueue("cutout", {"project_id":project_id,"asset_id":asset_id,"output_asset_id":output_asset_id,"project_dir":str(state.projects_dir/project_id)}, project_id=project_id)
+        return {"job_id":job_id,"asset_id":output_asset_id,"status":"processing"}
+
+    @api.post("/projects/{project_id}/assets/{asset_id}/extract-audio")
+    async def extract_audio(project_id: str, asset_id: str):
+        row = state.db.query_one(
+            "SELECT kind,status FROM assets WHERE project_id=? AND asset_id=?",
+            (project_id, asset_id),
+        )
+        if not row or row["kind"] != "video" or row["status"] != "ready":
+            return error_response(422, "E_NOT_READY", "choose a ready video asset")
+        output_asset_id = new_asset_id()
+        job_id = state.queue.enqueue("extract_audio", {
+            "project_id": project_id, "asset_id": asset_id,
+            "output_asset_id": output_asset_id,
+            "project_dir": str(state.projects_dir / project_id),
+        }, project_id=project_id)
+        return {"job_id": job_id, "asset_id": output_asset_id, "status": "processing"}
+
+    @api.post("/projects/{project_id}/text-to-sound")
+    async def text_to_sound(project_id: str, body: dict):
+        state.engine.get_project(project_id)
+        text = str((body or {}).get("text", "")).strip()
+        if not text or len(text) > 2000:
+            return error_response(422, "E_VALIDATION", "text must contain 1 to 2000 characters")
+        output_asset_id = new_asset_id()
+        job_id = state.queue.enqueue("text_to_sound", {
+            "project_id": project_id, "output_asset_id": output_asset_id,
+            "project_dir": str(state.projects_dir / project_id), "text": text,
+        }, project_id=project_id)
+        return {"job_id": job_id, "asset_id": output_asset_id, "status": "processing"}
+
     # -- understanding (P1) -----------------------------------------------------
 
     @api.post("/projects/{project_id}/assets/{asset_id}/analyze")
-    async def analyze_asset(project_id: str, asset_id: str):
+    async def analyze_asset(project_id: str, asset_id: str, body: dict | None = None):
         state.engine.get_project(project_id)
         row = state.db.query_one(
             "SELECT kind, src, status FROM assets WHERE project_id=? AND asset_id=?",
@@ -330,9 +512,17 @@ def create_app(data_dir: Path | None = None, start_worker: bool = True,
             return error_response(404, "E_NOT_FOUND", f"asset {asset_id} not found")
         if row["status"] != "ready":
             return error_response(409, "E_NOT_READY", "asset is still ingesting")
+        language = str((body or {}).get("language", "")).strip().lower()
+        if language and language not in {"en", "es", "fr", "de", "pt", "it", "ja", "ko", "zh"}:
+            return error_response(422, "E_VALIDATION", "unsupported caption language")
+        if language:
+            udir = state.projects_dir / project_id / "understanding"
+            for suffix in ("transcript.json", "saliency.json", "understanding.json"):
+                (udir / f"{asset_id}.{suffix}").unlink(missing_ok=True)
         job_id = state.queue.enqueue("understanding", {
             "project_id": project_id, "asset_id": asset_id, "kind": row["kind"],
             "src": row["src"], "project_dir": str(state.projects_dir / project_id),
+            "language": language or None,
         }, project_id=project_id)
         return {"asset_id": asset_id, "job_id": job_id, "status": "analyzing"}
 

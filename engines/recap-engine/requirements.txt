@@ -1,0 +1,10 @@
+# Core pipeline deps. ffmpeg/ffprobe must also be on PATH (system install).
+faster-whisper>=1.0.0     # local transcription
+numpy>=1.24               # embeddings + matching math
+fastembed>=0.3.0          # local CLIP + text embeddings (onnxruntime, no torch)
+yt-dlp>=2025.1.1          # URL/YouTube downloads
+openai>=1.40.0            # only for LLM_BACKEND=openrouter (manual backend needs nothing)
+# Local voiceover (install separately if the pip wheel is unavailable on your OS):
+#   piper-tts
+# Note: .env loading uses the vendored, dependency-free loader in ./dotenv/
+# (drop-in for python-dotenv), so python-dotenv itself is not required.

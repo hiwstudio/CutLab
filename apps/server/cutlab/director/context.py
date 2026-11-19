@@ -19,6 +19,7 @@ from ..understanding.schema import Understanding
 DIRECTOR_OP_VOCAB = {
     "remove_silence": "{asset, tracks?, min_ms?, ripple?} — cut silent spans of an asset's clips",
     "caption_from_transcript": "{asset, track, max_words?, max_gap_ms?} — add captions from speech",
+    "auto_lyrics": "{asset, max_words?, cap_style?} — create a dedicated lyric track from analyzed audio",
     "reframe": "{width, height, fps?} — change canvas + center-crop video clips (e.g. 1080x1920)",
     "trim": "{clip, new_in_ms?, new_out_ms?, edge_mode?} — trim a clip",
     "split": "{clip, at_ms} — split a clip at a timeline point",
@@ -28,6 +29,10 @@ DIRECTOR_OP_VOCAB = {
     "set_gain": "{clip, gain_db} — change a clip's gain (−60..+12 dB)",
     "delete_range": "{tracks, from_ms, to_ms, ripple?} — delete a timeline range",
     "add_caption": "{track, text, start_ms, end_ms} — add one caption",
+    "move_scene": "{scene, to_index} — reorder adjacent scenes with their layers; music tracks stay fixed",
+    "set_track": "{track, name?, role?, muted?, solo?, gain_db?} — track mix/settings; never unlock a locked track",
+    "set_clip_timing": "{clip, start_ms, in_ms, out_ms} — atomically set timeline start and source bounds",
+    "set_caption": "{clip, start_ms, end_ms, text} — edit caption timing and words",
     "set_project": "{name?} — rename the project",
 }
 
@@ -37,7 +42,8 @@ You translate the user's natural-language request into a PLAN of edit operations
 Hard rules:
 - Respond with ONLY a JSON object: {{"ops": [ ... ], "note": "one short sentence"}}.
 - Each op is one of the allowed operations below, with its exact parameter names.
-- All times are integer milliseconds on the TIMELINE (not source time).
+- All times are integer milliseconds. start/end/at are timeline time; in/out are source time.
+- Respect locked tracks. Scene ranges are explicit; ordinary clip edits do not resize them.
 - Refer to clips and assets by the ids given in the project brief. Never invent ids.
 - You never edit pixels or raw JSON; you only emit ops. The plan is PROPOSED to the
   user, who accepts or rejects it — so prefer a focused, correct plan.
@@ -92,8 +98,9 @@ def compile_context(edl: EDL, understanding: dict[str, Understanding]) -> dict:
             }
             for aid, a in edl.assets.items()
         },
+        "story_scenes": [s.model_dump() for s in edl.scenes],
         "tracks": [
-            {"id": t.id, "kind": t.kind, "clips": [_clip_brief(c) for c in t.clips]}
+            {"id": t.id, "kind": t.kind, "name": t.name, "role": t.role, "muted": t.muted, "solo": t.solo, "locked": t.locked, "gain_db": t.gain_db, "clips": [_clip_brief(c) for c in t.clips]}
             for t in edl.tracks
         ],
     }

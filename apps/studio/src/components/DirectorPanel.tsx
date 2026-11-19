@@ -11,8 +11,10 @@ import type { DirectorResult } from "@/lib/types";
 export function DirectorPanel({
   projectId,
   onProposed,
+  disabled = false,
 }: {
   projectId: string;
+  disabled?: boolean;
   onProposed: () => void;
 }) {
   const [backend, setBackend] = useState<string>("");
@@ -42,7 +44,7 @@ export function DirectorPanel({
   };
 
   const submit = async () => {
-    if (!text.trim()) return;
+    if (disabled || busy || !text.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -55,7 +57,7 @@ export function DirectorPanel({
   };
 
   const submitAnswer = async () => {
-    if (!pending || !answer.trim()) return;
+    if (disabled || busy || !pending || !answer.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -86,13 +88,13 @@ export function DirectorPanel({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          disabled={busy}
+          disabled={disabled || busy}
         />
         <button
           data-testid="director-send"
           className="rounded bg-indigo-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-indigo-600 disabled:opacity-40"
           onClick={submit}
-          disabled={busy || !text.trim()}
+          disabled={disabled || busy || !text.trim()}
         >
           {busy ? "…" : "Send"}
         </button>
@@ -125,7 +127,7 @@ export function DirectorPanel({
             data-testid="director-answer-send"
             className="mt-1 rounded bg-indigo-700 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-indigo-600 disabled:opacity-40"
             onClick={submitAnswer}
-            disabled={busy || !answer.trim()}
+            disabled={disabled || busy || !answer.trim()}
           >
             Submit plan
           </button>

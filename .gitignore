@@ -1,11 +1,33 @@
 # state / media
 data/
+engines/.venv/
+engines/**/.venv/
+engines/**/projects/
+engines/**/output/
+engines/**/downloads/
+engines/**/ai_tasks/
+engines/**/archives/
+engines/**/*.db
+engines/**/*.db-*
+engines/**/config.local.yaml
+engines/mixfix/config.yaml
+**/cookies.txt
+engines/recap-engine/voices/*
+!engines/recap-engine/voices/.gitkeep
+engines/hiw-studio/.remotion/
+engines/hiw-studio/.hiw/
+engines/hiw-studio/node_modules/
+engines/hiw-studio/dist/
+graphify-out/
 
 # python
 apps/server/.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+**/.pytest-*/
+**/.test-*/
+.test-*
 .hypothesis/
 
 # node
@@ -13,8 +35,23 @@ node_modules/
 .next/
 apps/studio/test-results/
 apps/studio/playwright-report/
+apps/studio/.next-*/
+
+# secrets
+.env
+**/.env
+**/.env.*
+!**/.env.example
+apps/server/.env
 
 # misc
 *.log
 .DS_Store
 apps/studio/.smoke-data/
+
+# Local Spine verification artifacts
+apps/server/.test-spine-*/
+apps/server/.spine-*.txt
+apps/studio/.spine-*.txt
+apps/studio/.spine-check.config.ts
+apps/studio/.spine-recheck/

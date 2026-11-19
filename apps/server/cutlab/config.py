@@ -6,6 +6,24 @@ import shutil
 import subprocess
 from pathlib import Path
 
+def _load_env_file(env_path: Path) -> None:
+    """Load a simple dotenv file into os.environ (existing values win). Supports
+    KEY=value lines, # comments, and optional surrounding quotes.
+    ponytail: stdlib parser, not python-dotenv — no export/multiline/varsub."""
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key, val = key.strip(), val.strip().strip('"').strip("'")
+        os.environ.setdefault(key, val)  # real env takes precedence
+
+
+_load_env_file(Path(__file__).resolve().parents[1] / ".env")
+_load_env_file(Path.home() / ".env")
+
 SERVER_HOST = os.environ.get("CUTLAB_HOST", "127.0.0.1")
 SERVER_PORT = int(os.environ.get("CUTLAB_PORT", "8787"))
 
@@ -14,6 +32,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = Path(os.environ.get("CUTLAB_DATA_DIR", REPO_ROOT / "data")).resolve()
 DB_PATH = DATA_DIR / "cutlab.db"
 PROJECTS_DIR = DATA_DIR / "projects"
+CUTOUT_MODEL = Path(os.environ.get(
+    "CUTLAB_CUTOUT_MODEL",
+    DATA_DIR / "models" / "u2netp.onnx",
+)).resolve()
+SOUND_LIBRARY_ROOT = Path(os.environ.get(
+    "CUTLAB_SOUND_LIBRARY_ROOT", DATA_DIR / "sounds",
+)).resolve()
+MIXFIX_ROOT = Path(os.environ.get(
+    "CUTLAB_MIXFIX_ROOT", REPO_ROOT / "engines" / "mixfix",
+)).resolve()
 
 PROXY_HEIGHT = 540
 RENDER_CHUNK_MS = 60_000
@@ -29,15 +57,20 @@ OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.environ.get("CUTLAB_LLM_MODEL", "anthropic/claude-sonnet-4.5")
 
+# --- Text to Sound ----------------------------------------------------------
+TTS_ENGINE = os.environ.get("CUTLAB_TTS_ENGINE", "fish")
+FISH_API_KEY = os.environ.get("FISH_API_KEY", "")
+FISH_MODEL = os.environ.get("CUTLAB_FISH_MODEL", "s2.1-pro-free")
+FISH_SPEED = float(os.environ.get("CUTLAB_FISH_SPEED", "0.85"))
+FISH_RETRIES = int(os.environ.get("CUTLAB_FISH_RETRIES", "4"))
+
 
 def _resolve_ff(tool: str) -> str:
     """Resolve an ffmpeg-family binary.
 
     Env override (CUTLAB_FFMPEG / CUTLAB_FFPROBE) wins. Otherwise prefer the
-    binary that lives next to ffprobe on PATH: on this machine ImageMagick
-    ships an ancient ffmpeg that shadows the real install, while ffprobe
-    resolves to the current build, so ffprobe's directory is the trustworthy
-    anchor.
+    binary that lives next to ffprobe on PATH, since another package may place
+    an incompatible ffmpeg earlier in PATH.
     """
     env = os.environ.get(f"CUTLAB_{tool.upper()}")
     if env:

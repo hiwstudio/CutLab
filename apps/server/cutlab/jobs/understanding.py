@@ -83,6 +83,7 @@ def understanding_handler(ctx: JobContext) -> None:
     duration_ms, has_audio = _asset_facts(db, project_id, asset_id, project_dir)
     is_video = kind == "video"
     analyze_audio = has_audio and kind in ("video", "audio")
+    language = inp.get("language") or None
 
     scenes_file = udir / f"{asset_id}.scenes.json"
     silence_file = udir / f"{asset_id}.silence.json"
@@ -124,7 +125,7 @@ def understanding_handler(ctx: JobContext) -> None:
     # Stage 3: transcript (audio-bearing only) — the slow whisper pass.
     def do_transcript() -> str:
         if analyze_audio:
-            tr = transcribe_mod.transcribe_video(str(src), str(udir))
+            tr = transcribe_mod.transcribe_video(str(src), str(udir), language=language)
             prov = transcribe_mod.provenance()
         else:
             tr, prov = Transcript(), None

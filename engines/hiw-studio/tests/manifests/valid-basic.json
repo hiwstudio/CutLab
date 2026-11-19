@@ -1,0 +1,31 @@
+{
+  "projectId": "valid-basic",
+  "title": "Valid Basic Test",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "scenes": [
+    {
+      "id": "scene_001",
+      "voiceover": "A simple valid scene.",
+      "start": 0,
+      "end": 4,
+      "background": "abstract_explainer",
+      "characters": [
+        { "id": "human", "variant": "modern", "position": "center", "expression": "happy", "motion": "idle" }
+      ],
+      "caption": { "text": "A simple valid scene.", "style": "hiw_default" }
+    },
+    {
+      "id": "scene_002",
+      "voiceover": "A second valid scene.",
+      "start": 4,
+      "end": 8,
+      "background": "office",
+      "characters": [
+        { "id": "ancient_brain", "position": "center", "expression": "confused", "motion": "lookAround" }
+      ],
+      "props": [{ "id": "laptop", "position": "right" }],
+      "caption": { "text": "A second valid scene.", "style": "hiw_default" }
+    }
+  ]
+}

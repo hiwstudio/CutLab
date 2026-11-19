@@ -9,10 +9,12 @@ export function ProposalReview({
   proposals,
   onAccept,
   onReject,
+  onView,
 }: {
   proposals: RevisionRow[];
   onAccept: (rev: number) => void;
   onReject: (rev: number) => void;
+  onView?: (rev: number) => void;
 }) {
   if (proposals.length === 0) return null;
   return (
@@ -34,6 +36,7 @@ export function ProposalReview({
         >
           <p className="text-[11px] leading-snug text-indigo-100">{p.summary}</p>
           <div className="mt-1 flex gap-2">
+            {onView && <button className="rounded bg-indigo-700 px-2 py-0.5 text-[10px] text-white" onClick={() => onView(p.rev)}>Preview</button>}
             <button
               data-testid={`accept-proposal-${p.rev}`}
               className="rounded bg-emerald-700 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-emerald-600"

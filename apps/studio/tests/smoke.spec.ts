@@ -10,6 +10,9 @@ import { FIXTURE } from "./global-setup";
 test("editor smoke: ingest, edit, undo, render", async ({ page }) => {
   // Create a project.
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Start a video project." })).toBeVisible();
+  await expect(page.getByTestId("engine-library")).toContainText("Clipinn");
+  await expect(page.getByTestId("engine-library")).toContainText("HIW Studio");
   await page.getByTestId("new-project-name").fill("Smoke Test");
   await page.getByTestId("create-project").click();
   await page.waitForURL(/\/p\/proj_/);
@@ -39,7 +42,7 @@ test("editor smoke: ingest, edit, undo, render", async ({ page }) => {
   // Set the playhead to ~2s (default zoom: 80 px/s; lane x = 2s * 80px).
   const timeline = page.getByTestId("timeline");
   const box = (await timeline.boundingBox())!;
-  await page.mouse.click(box.x + 72 + 160, box.y + 12);
+  await page.mouse.click(box.x + 178 + 160, box.y + 12);
 
   // Select the clip and split at the playhead.
   await clips.first().click();
@@ -55,6 +58,7 @@ test("editor smoke: ingest, edit, undo, render", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(hb.x - 40, hb.y + hb.height / 2, { steps: 5 });
   await page.mouse.up();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await expect(
     page.locator("button[data-testid^=revision-]").filter({ hasText: "trim" }).first(),
   ).toBeVisible({ timeout: 15_000 });

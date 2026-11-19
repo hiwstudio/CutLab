@@ -143,6 +143,57 @@ def test_job_endpoints_404(client: TestClient):
     assert client.post("/api/v1/jobs/job_nope/cancel").status_code == 404
 
 
+def test_browser_audio_webm_upload_is_classified_as_audio(client: TestClient):
+    pid = make_project(client)
+    response = client.post(
+        f"/api/v1/projects/{pid}/assets",
+        files={"file": ("voice-take.webm", b"recorded-opus", "audio/webm")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["kind"] == "audio"
+
+
+def test_text_to_sound_validates_and_enqueues(client: TestClient):
+    pid = make_project(client)
+    assert client.post(f"/api/v1/projects/{pid}/text-to-sound", json={"text": ""}).status_code == 422
+    response = client.post(
+        f"/api/v1/projects/{pid}/text-to-sound",
+        json={"text": "A short CutLab voice test."},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "processing"
+
+
+def test_sound_library_lists_previews_and_imports_curated_audio(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from cutlab import config
+
+    root = tmp_path / "sounds"
+    source = root / "music" / "upbeat" / "forward-motion-514d073f6718.mp3"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"ID3-curated-audio")
+    monkeypatch.setattr(config, "SOUND_LIBRARY_ROOT", root)
+    pid = make_project(client)
+
+    catalog = client.get("/api/v1/sound-library")
+    assert catalog.status_code == 200
+    assert catalog.json() == [{
+        "id": "music-forward-motion", "title": "Forward Motion",
+        "kind": "music", "category": "upbeat",
+        "filename": "forward-motion-514d073f6718.mp3",
+    }]
+    preview = client.get("/api/v1/sound-library/music-forward-motion/preview")
+    assert preview.status_code == 200 and preview.content == b"ID3-curated-audio"
+    imported = client.post(f"/api/v1/projects/{pid}/sound-library/music-forward-motion")
+    assert imported.status_code == 200, imported.text
+    body = imported.json()
+    assert body["status"] == "ingesting" and body["job_id"].startswith("job_")
+    copied = client.data_dir / "projects" / pid / body["src"]
+    assert copied.read_bytes() == source.read_bytes()
+    assert client.post(f"/api/v1/projects/{pid}/sound-library/not-real").status_code == 404
+
+
 def test_render_requires_known_rev(client: TestClient):
     pid = make_project(client)
     r = client.post(f"/api/v1/projects/{pid}/render", json={"rev": 99})

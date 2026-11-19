@@ -3,6 +3,24 @@
 Ambiguity resolutions, per B3's instruction to choose the simplest interpretation
 consistent with A2 and keep moving.
 
+## 2026-09-30 — Production ecosystem connection, first milestone
+
+The owner authorized connecting production engines to CutLab. Start with a
+reusable complete MixFix MIX/FIX adapter; Recap, Viral Clip, SPLIT/ASSEMBLY and
+shared capability dispatch remain subsequent milestones. CutLab copies source
+media into durable project storage and references source provenance in revision
+metadata. Engine updates arrive as proposals for surviving imported visual clips;
+they preserve timeline decisions and do not silently replace narration or other
+layers. Source link artifacts are immutable per update so undo restores provenance.
+Transactional head checks cover worker/editor races, not just HTTP request locks.
+
+Do not infer permission to approve source engine gates. A scene regeneration
+request is a CutLab-owned operator handoff file, explicitly awaiting execution;
+it does not call generation, modify MixFix source files or submit an engine gate.
+MIX crossfades and engine caption typography are explicit fidelity limitations.
+Frame-rounded held clips need a guard frame beyond the millisecond scene boundary,
+while the EDL retains the exact intended timeline duration.
+
 ## Phase 1 — Understanding Layer
 
 A11 specifies P1 as one line ("faster-whisper, PySceneDetect, silencedetect,
@@ -180,6 +198,18 @@ neither needs an LLM), then the LLM director on top.
   request state lives in files (resumable). Moving the director onto the job queue
   is a later option if calls get heavier (e.g. multi-step planning).
 
+## September 2026 — Spine selected
+
+- Owner selected **D / Spine** on 2026-09-13 for their personal CutLab workspace.
+  Its scene-based arrangement matches their engine workflow. This supersedes
+  July's S2/violet interface direction; see `DESIGN-SPEC.md`.
+- Keep **A / Studio** and **B / Bay** intact for a possible future public editor.
+  Original comparison archived at `docs/ui-concepts/archive/2026-09-11/`.
+- Borrow A's visual media browsing/single drawer and B's precise properties,
+  compact audio controls and history. D's rail, Lens and timeline remain central.
+- Refinements are sample prototypes until migrated through the real EDL,
+  revisions, preview and renderer. See `docs/SPINE-IMPLEMENTATION.md`.
+
 ## Environment
 
 - **ffmpeg resolution**: ImageMagick ships an ancient ffmpeg 4.2.3 that shadows the
@@ -232,3 +262,44 @@ neither needs an LLM), then the LLM director on top.
   `video_chunk_{n}` checkpoints. Implemented as: `plan` → `chunk_{n}` (each chunk
   compiles video+audio together into one intermediate mp4) → `mux` (concat demux +
   faststart). This is what makes resume real; audio is inside each chunk.
+
+
+### 2026-09-13 — Spine scene and mixer contracts
+
+Use backwards-compatible EDL scene ranges and track metadata with the existing
+revision engine. Scenes are explicit timeline ranges, not asset scene detections.
+Reordering contiguous scenes carries bounded media/caption portions; Music-role
+tracks remain fixed. Locks reject changes on the server. Content/mix changes
+invalidate affected approvals; undo restores them. Track gain adds to clip gain,
+mute hides/silences, and solo auditions audio without hiding other visuals.
+The first Studio migration is implemented. Generated-project import and
+selected-scene Director scoping remain subsequent work.
+# 2026-09-13 — Match the approved Spine preview by measurement
+
+The selected D / Spine concept is the visual source of truth for the personal
+CutLab editor. Implementation should copy its typefaces, dimensions, density,
+colour roles and content hierarchy directly; a merely similar dark editor is
+not an acceptable fidelity target. Responsive layouts may compress widths and
+typography while preserving that hierarchy.
+
+# 2026-09-13 — MixFix imports preserve source approval state
+
+A CutLab study may reuse an existing MixFix project's approved media outputs,
+timings and provenance through CutLab's asset/job and revision APIs. Importing
+does not approve or alter MixFix review gates. CutLab scene approval remains a
+separate user action.
+# 2026-11-19 — Bundle production engines with CutLab
+
+The owner asked that CutLab carry the reusable source for MixFix, Clipinn,
+Viral Clip Engine, Recap Engine, and HIW Studio so a fresh clone can run them
+with local agents.
+
+- Bundle engine code, safe examples, and tests under engines/.
+- Keep projects, source media, API keys, browser cookies, databases, models,
+  downloads, and renders local and Git-ignored.
+- Preserve each engine's own pipeline. MixFix MIX/FIX uses CutLab's direct
+  scene-linked adapter; other bundled engines currently feed rendered media
+  through CutLab's normal ingest flow.
+- Keep operator/manual mode as the agent default. API backends remain opt-in.
+- Make the home screen identify itself as the CutLab video editor and explain
+  how to start each bundled engine.

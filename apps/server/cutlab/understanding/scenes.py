@@ -1,6 +1,6 @@
 """Scene / shot-boundary detection (P1).
 
-Adapted from the owner's recap-engine `engine/scenes.py` (the reuse source per
+Adapted from the bundled Recap Engine's `engine/scenes.py` (the reuse source per
 CLAUDE.md): the classical ffmpeg `scene` filter, no model or extra dependency,
 deterministic. See DECISIONS.md for why this stands in for PySceneDetect.
 

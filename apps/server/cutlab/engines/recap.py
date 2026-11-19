@@ -5,7 +5,7 @@ original narration beats, match each beat to source scenes (time prior +
 dialogue similarity), and emit an EDL ops plan that the render engine realizes.
 The LLM calls and Piper TTS live in jobs/recap.py; everything here is pure.
 
-Adaptations from creathor/recap-engine (see DECISIONS.md):
+Adaptations from the bundled Recap Engine (see DECISIONS.md):
   - prompts carried over near-verbatim (they're production-tuned)
   - matching: time prior (w=0.5) + dialogue token-overlap (w=0.15); the CLIP
     visual term (w=0.35) is deferred — its weight slot remains so adding the

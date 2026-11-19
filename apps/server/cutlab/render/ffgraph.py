@@ -88,6 +88,17 @@ def _piece_video_chain(
     y = (canvas_h - h2) // 2 + piece.offset_y
 
     steps = []
+    if piece.reversed and not piece.is_image:
+        steps.append("reverse")
+    if piece.freeze_frame_at_ms is not None:
+        # The input supplies one decoded source frame; clone it for this exact
+        # visible timeline window (works for full renders and L1 windows).
+        steps.append(f"tpad=stop_mode=clone:stop_duration={(piece.end_ms - piece.start_ms) / 1000:.6g}")
+    if piece.video_fade_in_ms:
+        steps.append(f"fade=t=in:st=0:d={piece.video_fade_in_ms / 1000:.6g}")
+    if piece.video_fade_out_ms:
+        start_s = max(0, piece.end_ms - piece.start_ms - piece.video_fade_out_ms) / 1000
+        steps.append(f"fade=t=out:st={start_s:.6g}:d={piece.video_fade_out_ms / 1000:.6g}")
     if piece.speed != 1.0 and not piece.is_image:
         steps.append(f"setpts=(PTS-STARTPTS)/{piece.speed:.6g}")
     else:
@@ -97,7 +108,10 @@ def _piece_video_chain(
         steps.append(crop)
     steps.append(f"scale={w2}:{h2}")
     steps.append("setsar=1")
-    steps.append("format=yuv420p")
+    # Still-image overlays commonly carry transparency (stickers, drawings,
+    # cutouts).  Converting them to yuv420p here discards alpha and turns the
+    # transparent canvas black before the overlay filter sees it.
+    steps.append("format=rgba" if piece.is_image else "format=yuv420p")
 
     # Registry effects (validated caps only reach the plan).
     from .. import capabilities
@@ -106,6 +120,10 @@ def _piece_video_chain(
         f = capabilities.effect_filter(cap_id, params)
         if f:
             steps.append(f)
+    if piece.opacity < 1:
+        if not piece.is_image:
+            steps.append("format=rgba")
+        steps.append(f"colorchannelmixer=aa={piece.opacity:.6g}")
     # Outgoing transition at the CLIP's tail. Piece-local time is 0 at vis0_ms
     # and timeline-scaled (setpts already divided by speed), so the fade starts
     # at (clip end - duration - vis0) in piece-local seconds.
@@ -132,8 +150,11 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
     filters: list[str] = []
     n_inputs = 0
 
+    # FFmpeg accepts 0xRRGGBB reliably in filter arguments; canvas colors are
+    # stored as CSS-style #RRGGBB for the Studio preview.
+    background = plan.background_color.replace("#", "0x")
     filters.append(
-        f"color=c=black:s={plan.width}x{plan.height}:r={fps}:d={dur_s}[b]"
+        f"color=c={background}:s={plan.width}x{plan.height}:r={fps}:d={dur_s}[b]"
     )
     current = "b"
     n_label = 0
@@ -147,6 +168,24 @@ def compile_chunk(plan: Plan, index: int, project_dir: Path, work_dir: Path) -> 
             if piece.is_image:
                 inputs += ["-loop", "1", "-t", _sec(vis1 - vis0), "-i", src]
             else:
+                if piece.freeze_frame_at_ms is not None:
+                    inputs += ["-ss", _sec(piece.freeze_frame_at_ms), "-t", _sec(1_000 / plan.fps), "-i", src]
+                    label = f"p{n_label}"
+                    chain, x, y = _piece_video_chain(
+                        piece, n_inputs, label, plan.width, plan.height, plan.fps,
+                        vis0 - t0, vis0_ms=vis0,
+                    )
+                    filters.append(chain)
+                    out_label = f"v{n_label}"
+                    filters.append(
+                        f"[{current}][{label}]overlay={x}:{y}"
+                        f":enable='between(t,{_sec(vis0 - t0)},{_sec(vis1 - t0)})'"
+                        f":eof_action=pass[{out_label}]"
+                    )
+                    current = out_label
+                    n_label += 1
+                    n_inputs += 1
+                    continue
                 src_start = piece.in_ms + round((vis0 - piece.start_ms) * piece.speed)
                 src_dur = round((vis1 - vis0) * piece.speed)
                 inputs += ["-ss", _sec(src_start), "-t", _sec(src_dur), "-i", src]

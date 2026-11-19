@@ -1,6 +1,6 @@
 """Transcription via local faster-whisper (P1).
 
-Adapted from the owner's viral-clip-engine / recap-engine `engine/transcribe.py`
+Adapted from the bundled Viral Clip and Recap Engine transcription modules
 (the reuse source per CLAUDE.md): same model defaults and flags
 (`word_timestamps=True, vad_filter=True`), audio pre-extracted as 16 kHz mono
 pcm_s16le. Output is converted to the CutLab understanding schema (integer ms).
@@ -46,16 +46,18 @@ def _load_faster_whisper() -> _Model:
 
 
 def transcribe_audio(
-    audio_wav: str, load_model: Callable[[], _Model] | None = None
+    audio_wav: str, load_model: Callable[[], _Model] | None = None,
+    language: str | None = None,
 ) -> Transcript:
     """Transcribe a prepared wav into a CutLab Transcript (ms units).
 
     `load_model` defaults to the real faster-whisper loader, resolved by name at
     call time so tests (and the understanding job) can monkeypatch it."""
     model = (load_model or _load_faster_whisper)()
-    segments_iter, info = model.transcribe(
-        str(audio_wav), word_timestamps=True, vad_filter=True
-    )
+    kwargs: dict[str, Any] = {"word_timestamps": True, "vad_filter": True}
+    if language:
+        kwargs["language"] = language
+    segments_iter, info = model.transcribe(str(audio_wav), **kwargs)
 
     segments: list[TranscriptSegment] = []
     for seg in segments_iter:
@@ -86,10 +88,11 @@ def transcribe_audio(
 
 
 def transcribe_video(
-    video: str, workdir: str, load_model: Callable[[], _Model] | None = None
+    video: str, workdir: str, load_model: Callable[[], _Model] | None = None,
+    language: str | None = None,
 ) -> Transcript:
     wav = extract_audio(video, str(Path(workdir) / "audio.wav"))
-    return transcribe_audio(wav, load_model=load_model)
+    return transcribe_audio(wav, load_model=load_model, language=language)
 
 
 def provenance() -> dict[str, str]:

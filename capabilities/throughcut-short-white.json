@@ -1,0 +1,13 @@
+{
+  "id": "throughcut-short-white",
+  "kind": "caption_style",
+  "name": "Throughcut Shorts — compact white",
+  "font": "Arial Black",
+  "size_frac": 0.041667,
+  "primary": "&H00FFFFFF",
+  "outline_colour": "&H00000000",
+  "outline": 4,
+  "shadow": 1,
+  "align": 2,
+  "margin_v_frac": 0.25
+}

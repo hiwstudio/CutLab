@@ -29,8 +29,13 @@ class VideoPiece:
     scale: float = 1.0
     offset_x: int = 0
     offset_y: int = 0
+    opacity: float = 1.0
     effects: list[tuple[str, dict]] = field(default_factory=list)  # (cap, params)
     transition_out: tuple[str, int] | None = None                  # (cap, duration_ms)
+    reversed: bool = False
+    freeze_frame_at_ms: int | None = None
+    video_fade_in_ms: int = 0
+    video_fade_out_ms: int = 0
 
 
 @dataclass
@@ -42,6 +47,13 @@ class AudioPiece:
     start_ms: int
     end_ms: int
     gain_db: float
+    fade_in_ms: int = 0
+    fade_out_ms: int = 0
+    reversed: bool = False
+    denoise: bool = False
+    low_cut_hz: int = 0
+    high_cut_hz: int = 0
+    effect: str = "none"
 
 
 @dataclass
@@ -58,6 +70,7 @@ class Plan:
     height: int
     fps: float
     duration_ms: int
+    background_color: str = "#000000"
     video_tracks: list[list[VideoPiece]] = field(default_factory=list)  # bottom-up
     audio: list[AudioPiece] = field(default_factory=list)
     captions: list[CaptionPiece] = field(default_factory=list)
@@ -85,11 +98,15 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
         height=edl.project.canvas.height,
         fps=edl.project.canvas.fps,
         duration_ms=duration,
+        background_color=edl.project.canvas.background_color,
     )
     if duration == 0:
         return plan
 
     for track in edl.tracks:
+        if track.muted:
+            continue
+        audio_enabled = (not any(t.solo for t in edl.tracks if t.kind in ("audio", "video")) or track.solo)
         if track.kind in ("caption", "text"):
             for clip in track.clips:
                 assert isinstance(clip, CaptionClip)
@@ -128,7 +145,9 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
                     in_ms=clip.in_ms, out_ms=clip.out_ms, speed=clip.speed,
                     start_ms=clip.start_ms, end_ms=clip.end_ms(),
                     asset_w=asset.width or 0, asset_h=asset.height or 0,
-                    effects=effects, transition_out=transition,
+                    opacity=clip.opacity, effects=effects, transition_out=transition,
+                    reversed=clip.reversed, freeze_frame_at_ms=clip.freeze_frame_at_ms,
+                    video_fade_in_ms=clip.video_fade_in_ms, video_fade_out_ms=clip.video_fade_out_ms,
                 )
                 if clip.crop:
                     piece.crop_mode = clip.crop.mode
@@ -142,12 +161,18 @@ def build_plan(edl: EDL, asset_audio: dict[str, bool]) -> Plan:
                 pieces.append(piece)
 
             # Audio: any clip whose asset carries an audio stream contributes.
-            if asset.kind != "image" and asset_audio.get(clip.asset, False):
+            if audio_enabled and asset.kind != "image" and asset_audio.get(clip.asset, False):
                 plan.audio.append(AudioPiece(
                     src=asset.src,
                     in_ms=clip.in_ms, out_ms=clip.out_ms, speed=clip.speed,
                     start_ms=clip.start_ms, end_ms=clip.end_ms(),
-                    gain_db=clip.gain_db,
+                    gain_db=clip.gain_db + track.gain_db,
+                    fade_in_ms=clip.fade_in_ms, fade_out_ms=clip.fade_out_ms,
+                    reversed=clip.reversed,
+                    denoise=clip.audio_denoise,
+                    low_cut_hz=clip.audio_low_cut_hz,
+                    high_cut_hz=clip.audio_high_cut_hz,
+                    effect=clip.audio_effect,
                 ))
         if track.kind == "video":
             plan.video_tracks.append(pieces)
@@ -169,7 +194,7 @@ def window_plan(plan: Plan, from_ms: int, to_ms: int, quality: str = "preview") 
 
     out = Plan(width=plan.width, height=plan.height, fps=plan.fps,
                duration_ms=to_ms - from_ms, warnings=list(plan.warnings),
-               quality=quality)
+               quality=quality, background_color=plan.background_color)
 
     for pieces in plan.video_tracks:
         windowed: list[VideoPiece] = []
@@ -198,6 +223,12 @@ def window_plan(plan: Plan, from_ms: int, to_ms: int, quality: str = "preview") 
             speed=a.speed,
             start_ms=vis0 - from_ms, end_ms=vis1 - from_ms,
             gain_db=a.gain_db,
+            fade_in_ms=a.fade_in_ms if vis0 == a.start_ms else 0,
+            fade_out_ms=a.fade_out_ms if vis1 == a.end_ms else 0,
+            reversed=a.reversed,
+            denoise=a.denoise, low_cut_hz=a.low_cut_hz,
+            high_cut_hz=a.high_cut_hz,
+            effect=a.effect,
         ))
 
     for c in plan.captions:

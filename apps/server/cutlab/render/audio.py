@@ -23,7 +23,27 @@ def atempo_chain(speed: float) -> list[str]:
 def piece_filter(piece: AudioPiece, input_index: int, delay_ms: int, label: str) -> str:
     """Filter chain for one audio piece, already source-trimmed by input seek."""
     steps = ["asetpts=PTS-STARTPTS"]
+    if piece.reversed:
+        steps.append("areverse")
     steps += atempo_chain(piece.speed)
+    if piece.low_cut_hz:
+        steps.append(f"highpass=f={piece.low_cut_hz}")
+    if piece.high_cut_hz:
+        steps.append(f"lowpass=f={piece.high_cut_hz}")
+    if piece.denoise:
+        steps.append("afftdn=nr=12:nf=-45")
+    if piece.effect == "voice-enhance":
+        steps += ["highpass=f=80", "equalizer=f=3000:t=q:w=1:g=3", "acompressor=threshold=0.125:ratio=3:attack=20:release=250:makeup=1.5"]
+    elif piece.effect == "telephone":
+        steps += ["highpass=f=300", "lowpass=f=3400"]
+    elif piece.effect == "echo":
+        steps.append("aecho=0.8:0.7:60:0.3")
+    duration_ms = piece.end_ms - piece.start_ms
+    if piece.fade_in_ms:
+        steps.append(f"afade=t=in:st=0:d={piece.fade_in_ms / 1000:.6g}")
+    if piece.fade_out_ms:
+        start_s = max(0, duration_ms - piece.fade_out_ms) / 1000
+        steps.append(f"afade=t=out:st={start_s:.6g}:d={piece.fade_out_ms / 1000:.6g}")
     if piece.gain_db:
         steps.append(f"volume={piece.gain_db:.6g}dB")
     steps.append("aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo")

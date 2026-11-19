@@ -34,6 +34,8 @@ export function UnderstandingPanel({
   const hasContent = hasSpeech || u.active_ranges.length > 0;
   const [compactTarget, setCompactTarget] = useState(30_000);
   const [recapTarget, setRecapTarget] = useState(5);
+  const [captionStyle, setCaptionStyle] = useState("default");
+  const [captionWords, setCaptionWords] = useState(6);
   const words = u.transcript?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
   const peak =
     u.saliency && u.saliency.windows.length
@@ -109,6 +111,8 @@ export function UnderstandingPanel({
             Propose a smart edit
           </div>
           <div className="flex flex-wrap gap-2">
+            <select aria-label="Generated caption template" value={captionStyle} onChange={e => setCaptionStyle(e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-[11px] text-zinc-200"><option value="default">Clean captions</option><option value="bold-pop">Bold Pop</option><option value="boxed">Boxed</option><option value="top-title">Top Title</option><option value="karaoke">Karaoke Lyrics</option></select>
+            <select aria-label="Words per caption" value={captionWords} onChange={e => setCaptionWords(Number(e.target.value))} className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-[11px] text-zinc-200"><option value={3}>3 words</option><option value={6}>6 words</option><option value={10}>10 words</option></select>
             <button
               data-testid="propose-remove-silence"
               disabled={!hasSilence}
@@ -130,6 +134,8 @@ export function UnderstandingPanel({
                   op: "caption_from_transcript",
                   asset: u.asset_id,
                   track: captionTrackId,
+                  max_words: captionWords,
+                  cap_style: captionStyle,
                 })
               }
               title={
@@ -141,6 +147,18 @@ export function UnderstandingPanel({
               }
             >
               Captions from transcript
+            </button>
+            <button
+              data-testid="propose-auto-lyrics"
+              disabled={!hasSpeech}
+              className="rounded bg-cyan-800 px-2 py-1 text-[11px] text-cyan-100 enabled:hover:bg-cyan-700 disabled:opacity-40"
+              onClick={() => onPropose({
+                op: "auto_lyrics", asset: u.asset_id,
+                max_words: Math.min(6, captionWords), cap_style: "karaoke",
+              })}
+              title={hasSpeech ? "Create a dedicated short-phrase lyric track" : "Analyze a vocal song first"}
+            >
+              Auto Lyrics
             </button>
             <button
               data-testid="propose-reframe"

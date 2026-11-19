@@ -10,7 +10,7 @@ owner's recap-engine which caches every stage):
 
 LLM backend: the same pluggable stack as the director. The manual backend
 writes `<step>.prompt.txt` into the stage dir and polls for `<step>.answer.txt`
-(cancellable) — the same file hand-off recap-engine uses, so a crash or restart
+    (cancellable) — the same file hand-off as the bundled Recap Engine, so a crash or restart
 resumes exactly where it left off.
 
 Input: {project_id, asset_id, target_minutes, project_dir}.
@@ -24,6 +24,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from .. import config
 from ..director import backends
 from ..edl.engine import Engine, Rejected
 from ..engines import recap
@@ -35,7 +36,7 @@ from .queue import JobContext
 
 PIPER_VOICE = os.environ.get(
     "CUTLAB_PIPER_VOICE",
-    r"C:\Users\ALLTRON\content\creathor\recap-engine\voices\en_US-lessac-medium.onnx",
+    str(config.DATA_DIR / "voices" / "en_US-lessac-medium.onnx"),
 )
 PIPER_HELP = (
     "Local TTS needs Piper + a voice model: pip install piper-tts, download a "
@@ -104,7 +105,7 @@ def _synth(text: str, out_wav: Path) -> None:
     proc = subprocess.run(cmd, input=text, text=True, capture_output=True, timeout=600)
     if proc.returncode != 0 or not raw.exists():
         raise RuntimeError(f"Piper failed: {(proc.stderr or '')[-500:]}")
-    # Broadcast loudness + 48k stereo so narration mixes cleanly (owner's spec).
+    # Broadcast loudness + 48k stereo so narration mixes cleanly.
     run_ffmpeg(["-i", str(raw), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
                 "-ar", "48000", "-ac", "2", str(out_wav)])
     raw.unlink(missing_ok=True)

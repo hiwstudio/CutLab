@@ -1,4 +1,4 @@
-"""Telegram approval gate (P4) — @AlltronzBot surface for CutLab proposals.
+"""Optional Telegram approval surface (P4) for CutLab proposals.
 
 Follows the owner's telegram-gate conventions: the pipeline never blocks on a
 human — a compaction job proposes a revision and (when Telegram is configured)
